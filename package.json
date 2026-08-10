@@ -1,31 +1,31 @@
 {
-  "name": "emirates-face-recognition",
-  "version": "1.0.0",
+  "name": "efr",
+  "version": "0.1.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint ."
+    "lint": "eslint"
   },
   "dependencies": {
-    "framer-motion": "^12.23.12",
-    "mongoose": "^8.13.2",
-    "next": "^16.0.0",
-    "nodemailer": "^6.10.0",
-    "react": "^19.2.0",
-    "react-dom": "^19.2.0",
-    "react-icons": "^5.5.0"
+    "@types/three": "^0.185.3",
+    "framer-motion": "^13.0.0",
+    "next": "16.2.12",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "react-icons": "^5.7.0",
+    "three": "^0.185.1"
   },
   "devDependencies": {
-    "@types/node": "22.20.1",
+    "@iconify-icon/react": "^3.0.3",
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "20.19.43",
     "@types/react": "19.2.18",
-    "@types/react-dom": "^19.2.2",
-    "autoprefixer": "^10.4.23",
-    "eslint": "^9.39.1",
-    "eslint-config-next": "^16.0.0",
-    "postcss": "^8.5.6",
-    "tailwindcss": "^3.4.17",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.2.12",
+    "tailwindcss": "^4",
     "typescript": "6.0.3"
   }
 }

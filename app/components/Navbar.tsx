@@ -110,6 +110,7 @@ const sectionProgressMap: Record<string, number> = {
 export default function NeumorphicNavbar() {
   const [activeId, setActiveId] = useState("home");
   const [journeyProgress, setJourneyProgress] = useState(0);
+  const [isCollapsed, setIsCollapsed] = useState(false);
 
   useEffect(() => {
     const handleProgressUpdate = (event: Event) => {
@@ -255,7 +256,7 @@ export default function NeumorphicNavbar() {
             className="h-8 w-auto object-contain sm:h-10"
           />
         </button>
-        <div className="flex items-center gap-3 rounded-2xl border border-white/45 bg-white/70 pl-2 pr-3 py-4 shadow-[0_12px_32px_rgba(15,23,42,0.14)] backdrop-blur-sm">
+        <div className={`flex absolute top-[80px] right-0 items-center gap-3 rounded-2xl border border-white/45 bg-white/70 pl-2 pr-3 py-4 shadow-[0_12px_32px_rgba(15,23,42,0.14)] backdrop-blur-sm transition-all duration-300`}>
           <div className="flex h-88 flex-col items-center justify-between">
             {navLinks.map((link) => {
               const isActive = activeId === link.id;
@@ -266,7 +267,7 @@ export default function NeumorphicNavbar() {
                   onClick={() => handleNavigate(link.id)}
                   aria-label={`Go to ${link.label}`}
                   title={link.label}
-                  className="flex  w-full justify-between gap-2 rounded-md px-1 py-1"
+                  className=" flex w-full justify-between gap-2 rounded-md px-1 py-1"
                 >
                   <svg
                     min={20}
@@ -277,38 +278,54 @@ export default function NeumorphicNavbar() {
                   >
                     {link.svgPath}
                   </svg>
+                  {!isCollapsed && (
+                    <span
+                      className={`pointer-events-none whitespace-nowrap text-[10px] font-semibold uppercase tracking-[0.14em] transition-colors ${isActive ? "text-(--accent)" : "text-slate-500"
+                        }`}
+                    >
+                      {link.label}
+                    </span>
+                  )}
                   <span
-                    className={`pointer-events-none whitespace-nowrap text-[10px] font-semibold uppercase tracking-[0.14em] transition-colors ${
-                      isActive ? "text-(--accent)" : "text-slate-500"
-                    }`}
-                  >
-                    {link.label}
-                  </span>
-                  <span
-                    className={`h-3.5 w-3.5 rounded-full border transition-all duration-300 ${
-                      isActive
+                    className={`h-3.5 w-3.5 rounded-full border transition-all duration-300 ${isActive
                         ? "scale-110 border-white bg-(--accent) shadow-[0_0_0_4px_rgba(18,70,119,0.2)]"
                         : "border-slate-300 bg-white hover:border-(--accent)"
-                    }`}
+                      }`}
                   />
                 </button>
               );
             })}
           </div>
 
-          <div className="relative h-88 w-2.5 rounded-full bg-slate-200">
-            <div
-              className="absolute bottom-0 left-0 w-full rounded-full bg-[linear-gradient(180deg,#2f78bc_0%,#124677_100%)] transition-[height] duration-500"
-              style={{ height: `${Math.max(6, journeyProgress * 100)}%` }}
-            />
-          </div>
-
-          {/* <div className="-rotate-180 [writing-mode:vertical-rl]">
-            <p className="mt-1 text-[10px] font-semibold text-(--accent)">
-              {navLinks.find((link) => link.id === activeId)?.label ?? "Home"}
-            </p>
-          </div> */}
+          {!isCollapsed && (
+            <div className="relative h-88 w-2.5 rounded-full bg-slate-200">
+              <div
+                className="absolute bottom-0 left-0 w-full rounded-full bg-[linear-gradient(180deg,#2f78bc_0%,#124677_100%)] transition-[height] duration-500"
+                style={{ height: `${Math.max(6, journeyProgress * 100)}%` }}
+              />
+            </div>
+          )}
         </div>
+
+        <button
+          type="button"
+          onClick={() => setIsCollapsed((prev) => !prev)}
+          aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+          className="mt-2 absolute top-[55px] left-[-10px] self-center rounded-full border border-white/45 bg-white/70 p-1.5 shadow-[0_4px_12px_rgba(15,23,42,0.12)] backdrop-blur-sm transition-all duration-300 hover:bg-white/90"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            className={`text-[#124677] transition-transform duration-300 ${isCollapsed ? "rotate-180" : ""}`}
+          >
+            <path
+              fill="currentColor"
+              d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6z"
+            />
+          </svg>
+        </button>
       </aside>
     </>
   );

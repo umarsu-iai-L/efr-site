@@ -7,6 +7,7 @@ import {
   useTransform,
   type MotionValue,
 } from "framer-motion";
+import Image from "next/image";
 import React, { useEffect, useRef, useState } from "react";
 import TrustedPartnersBillboard from "./TrustedPartners";
 
@@ -509,41 +510,15 @@ export default function MultiverseFlight() {
             animate={{ y: [0, -14, 0], rotateZ: [0, 1.2, 0] }}
             transition={{ duration: 5.5, repeat: Infinity, ease: "easeInOut" }}
           >
-            <div className="relative flex w-full items-center justify-center overflow-hidden rounded-[1.8rem] border border-dashed border-white/45 bg-[radial-gradient(circle_at_center,_rgba(147,197,253,0.28),_rgba(255,255,255,0.04)_60%,_transparent_100%)]">
-              <div className="absolute inset-0 bg-[radial-gradient(circle,_rgba(255,255,255,0.18)_1px,_transparent_1.5px)] [background-size:18px_18px] opacity-60" />
-              <motion.div
-                className="absolute h-44 w-44 rounded-full border border-sky-100/40"
-                animate={{
-                  scale: [0.92, 1.06, 0.92],
-                  opacity: [0.34, 0.7, 0.34],
-                }}
-                transition={{
-                  duration: 4.4,
-                  repeat: Infinity,
-                  ease: "easeInOut",
-                }}
+            <div className="relative flex w-full items-center justify-center overflow-hidden rounded-[1.8rem]">
+              <Image
+                src="/EFR-3D.png"
+                alt="EFR 3D Logo"
+                width={520}
+                height={360}
+                className="h-full w-full object-contain mix-blend-multiply"
+                priority
               />
-              <motion.div
-                className="absolute h-60 w-44 rounded-[48%] border border-sky-100/35"
-                animate={{
-                  scale: [0.96, 1.04, 0.96],
-                  rotate: [-1.5, 1.5, -1.5],
-                }}
-                transition={{
-                  duration: 6.2,
-                  repeat: Infinity,
-                  ease: "easeInOut",
-                }}
-              />
-              <div className="relative z-10 mx-auto max-w-[16rem] text-center text-sky-50">
-                <p className="text-xs font-semibold uppercase tracking-[0.34em] text-sky-100/80">
-                  Particle Face Zone
-                </p>
-                <p className="mt-4 text-sm leading-6 text-slate-200/90">
-                  Drop your custom face-built-with-particles visual here. The
-                  animation shell is already wired into the hero flight.
-                </p>
-              </div>
             </div>
           </motion.div>
 

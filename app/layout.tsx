@@ -1,16 +1,50 @@
-import type { Metadata } from "next";
-import type { ReactNode } from "react";
+import type { Metadata, Viewport } from "next";
+import localFont from "next/font/local";
 import "./globals.css";
+import Navbar from "./components/Navbar";
+import SpaceParticles from "./components/SpaceParticles";
+
+const urbanist = localFont({
+  src: [
+    {
+      path: "../public/urbanist-var.ttf",
+      style: "normal",
+      weight: "100 900",
+    },
+    {
+      path: "../public/urbanist-italic.ttf",
+      style: "italic",
+      weight: "100 900",
+    },
+  ],
+  variable: "--font-urbanist",
+  display: "swap",
+  fallback: ["Segoe UI", "Arial", "sans-serif"],
+});
 
 export const metadata: Metadata = {
-  title: "Emirates Face Recognition",
-  description: "Advanced biometric solutions",
+  title: "EFR - Next-Generation Facial Recognition for Security",
+  description:
+    "EFR delivers cutting-edge biometric facial recognition solutions to enhance security, streamline services, and revolutionize industries.",
 };
 
-export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+};
+
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body className={`${urbanist.variable} relative min-h-screen antialiased`}>
+        <SpaceParticles />
+        <Navbar />
+        <main className="relative z-10">{children}</main>
+      </body>
     </html>
   );
 }

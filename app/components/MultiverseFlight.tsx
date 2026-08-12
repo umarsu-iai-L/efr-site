@@ -223,11 +223,13 @@ function BillboardCard({
       // make the first word visible immediately to avoid an empty gap
       gsap.set(children[0], { yPercent: 0, autoAlpha: 1 });
 
-      const tl = gsap.timeline({ repeat: -1, repeatDelay: 0.3 });
+      const tl = gsap.timeline({ repeat: -1, repeatDelay: 1 });
 
       children.forEach((el) => {
-        tl.to(el, { yPercent: 0, autoAlpha: 1, duration: 0.5, ease: "power2.out" })
-          .to(el, { yPercent: -100, autoAlpha: 0, duration: 0.5, ease: "power2.in" }, "+=2.2");
+        // Animate in (0.6s) + stay visible (3.5s) + fade out (0.6s) = 4.7s per word
+        tl.to(el, { yPercent: 0, autoAlpha: 1, duration: 0.6, ease: "power2.out" })
+          .to(el, { yPercent: 0, autoAlpha: 1, duration: 3.5 }, "+=0") // Stay visible for 3.5s
+          .to(el, { yPercent: -100, autoAlpha: 0, duration: 0.6, ease: "power2.in" });
       });
 
       return () => {

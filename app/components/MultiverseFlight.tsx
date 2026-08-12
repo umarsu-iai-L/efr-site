@@ -1,12 +1,17 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import gsap from "gsap";
 import ScrollTrigger from "gsap/ScrollTrigger";
 import Image from "next/image";
 import React, { useEffect, useRef, useState } from "react";
 import SpaceParticles from "./SpaceParticles";
-import TrustedPartnersBillboard from "./TrustedPartners";
 import { BiRightArrow } from "react-icons/bi";
+
+const TrustedPartnersBillboard = dynamic(() => import("./TrustedPartners"), {
+  loading: () => <div className="h-20 bg-gradient-to-b from-black/50 to-transparent" />,
+  ssr: true,
+});
 
 gsap.registerPlugin(ScrollTrigger);
 

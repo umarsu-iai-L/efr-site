@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 
 const PARTICLE_COUNT = 1200;
+const INITIAL_PARTICLES = 300; // Reduced initial load
 const FIELD_DEPTH = 60;
 const FIELD_WIDTH = 44;
 const CAMERA_Z = 18;
@@ -27,13 +28,15 @@ function createCircleTexture(): THREE.Texture {
 
 export default function SpaceParticles() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [particleCount, setParticleCount] = useState(INITIAL_PARTICLES);
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
     const isMobile = window.innerWidth <= MOBILE_BREAKPOINT;
-    const particleCount = isMobile ? 560 : PARTICLE_COUNT;
+    const initialCount = isMobile ? 150 : INITIAL_PARTICLES;
+    const finalCount = isMobile ? 560 : PARTICLE_COUNT;
     const fieldWidth = isMobile ? 34 : FIELD_WIDTH;
 
     const scene = new THREE.Scene();
@@ -48,19 +51,21 @@ export default function SpaceParticles() {
     const renderer = new THREE.WebGLRenderer({
       canvas,
       alpha: true,
-      antialias: true,
+      antialias: false, // Disabled for better performance
+      powerPreference: "high-performance",
     });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5)); // Reduced from 2
     renderer.setSize(window.innerWidth, window.innerHeight);
 
     // Rounded, faded-blue starfield drifting through the z axis
-    const positions = new Float32Array(particleCount * 3);
-    const speeds = new Float32Array(particleCount);
-    const baseX = new Float32Array(particleCount);
-    const baseY = new Float32Array(particleCount);
-    const jitterPhase = new Float32Array(particleCount);
-    const jitterFreq = new Float32Array(particleCount);
-    for (let i = 0; i < particleCount; i++) {
+    const positions = new Float32Array(finalCount * 3);
+    const speeds = new Float32Array(finalCount);
+    const baseX = new Float32Array(finalCount);
+    const baseY = new Float32Array(finalCount);
+    const jitterPhase = new Float32Array(finalCount);
+    const jitterFreq = new Float32Array(finalCount);
+    
+    for (let i = 0; i < finalCount; i++) {
       const x = (Math.random() - 0.5) * fieldWidth;
       const y = (Math.random() - 0.5) * fieldWidth * 0.6;
       positions[i * 3] = x;
@@ -72,8 +77,11 @@ export default function SpaceParticles() {
       jitterPhase[i] = Math.random() * Math.PI * 2;
       jitterFreq[i] = 0.3 + Math.random() * 0.5;
     }
+    
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+    geometry.setDrawRange(0, initialCount); // Start with fewer particles
+    
     const material = new THREE.PointsMaterial({
       map: createCircleTexture(),
       color: new THREE.Color("#3b82f6"),
@@ -134,11 +142,25 @@ export default function SpaceParticles() {
     let rafId: number;
     const posAttr = geometry.getAttribute("position") as THREE.BufferAttribute;
     const posArray = posAttr.array as Float32Array;
+    let currentParticleCount = initialCount;
 
     const JITTER_AMOUNT = 0.12;
 
+    // Gradually add more particles after initial load
+    let lastParticleAddTime = 0;
+    const addParticlesGradually = () => {
+      const now = Date.now();
+      if (now - lastParticleAddTime > 1000 && currentParticleCount < finalCount) {
+        const increment = Math.min(100, finalCount - currentParticleCount);
+        currentParticleCount += increment;
+        geometry.setDrawRange(0, currentParticleCount);
+        lastParticleAddTime = now;
+      }
+    };
+
     const animate = (time: number) => {
       rafId = requestAnimationFrame(animate);
+      addParticlesGradually();
 
       rotation.x += (mouse.y * 0.08 - rotation.x) * 0.04;
       rotation.y += (mouse.x * 0.08 - rotation.y) * 0.04;
@@ -159,7 +181,7 @@ export default function SpaceParticles() {
       const targetOpacity = THREE.MathUtils.lerp(0.24, 0.1, endPhaseMix);
       material.opacity += (targetOpacity - material.opacity) * 0.06;
 
-      for (let i = 0; i < particleCount; i++) {
+      for (let i = 0; i < currentParticleCount; i++) {
         const base = i * 3;
 
         // Tiny in-place wobble, bounded around each particle's origin

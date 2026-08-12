@@ -241,8 +241,8 @@ export default function NeumorphicNavbar() {
         </nav> */}
       </div>
 
-      <aside className="fixed right-4 top-1/2 z-40  -translate-y-1/2 flex flex-col">
-        <button
+      <aside className="fixed right-4 z-40 flex flex-col">
+        {/* <button
           type="button"
           className="p-2 rounded-md cursor-pointer border-white/45 bg-white/70 px-3 py-4 shadow-[0_12px_32px_rgba(15,23,42,0.14)] backdrop-blur-sm  mb-2"
           onClick={() => handleNavigate("home")}
@@ -255,7 +255,7 @@ export default function NeumorphicNavbar() {
             priority
             className="h-8 w-auto object-contain sm:h-10"
           />
-        </button>
+        </button> */}
         <div className={`flex absolute top-[80px] right-0 items-center gap-3 rounded-2xl border border-white/45 bg-white/70 pl-2 pr-3 py-4 shadow-[0_12px_32px_rgba(15,23,42,0.14)] backdrop-blur-sm transition-all duration-300`}>
           <div className="flex h-88 flex-col items-center justify-between">
             {navLinks.map((link) => {

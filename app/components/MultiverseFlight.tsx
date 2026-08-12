@@ -1,21 +1,21 @@
 "use client";
 
-import {
-  motion,
-  useMotionTemplate,
-  useScroll,
-  useTransform,
-  type MotionValue,
-} from "framer-motion";
+import gsap from "gsap";
+import ScrollTrigger from "gsap/ScrollTrigger";
 import Image from "next/image";
 import React, { useEffect, useRef, useState } from "react";
+import SpaceParticles from "./SpaceParticles";
 import TrustedPartnersBillboard from "./TrustedPartners";
+import { BiRightArrow } from "react-icons/bi";
+
+gsap.registerPlugin(ScrollTrigger);
 
 type FlightCard = {
   id: string;
   eyebrow: string;
   eyebrowIcon?: React.ReactNode;
   title: string;
+  dynamicWords?: string[];
   description: string;
   cta: string;
   align: "left" | "right";
@@ -28,6 +28,7 @@ type FlightCard = {
 const cards: FlightCard[] = [
   {
     id: "home",
+    dynamicWords: ["Speed", "Security", "Compliance"],
     eyebrowIcon: `<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24">
   <path fill="currentColor" d="M5 19v-8.692q0-.384.172-.727t.474-.565l5.385-4.078q.423-.323.966-.323t.972.323l5.385 4.077q.303.222.474.566q.172.343.172.727V19q0 .402-.299.701T18 20h-3.384q-.344 0-.576-.232q-.232-.233-.232-.576v-4.769q0-.343-.232-.575q-.233-.233-.576-.233h-2q-.343 0-.575.233q-.233.232-.233.575v4.77q0 .343-.232.575T9.385 20H6q-.402 0-.701-.299T5 19"></path>
 </svg>`,
@@ -184,17 +185,151 @@ function BillboardCard({
   card,
   index,
   isMobile,
-  scrollYProgress,
+  containerRef,
   revealStart,
   revealEnd,
 }: {
   card: FlightCard;
   index: number;
   isMobile: boolean;
-  scrollYProgress: MotionValue<number>;
+  containerRef: React.RefObject<HTMLDivElement>;
   revealStart: number;
   revealEnd: number;
 }) {
+  const cardRef = useRef<HTMLDivElement>(null);
+
+  // AnimatedWords component: cycles through provided words using GSAP
+  function AnimatedWords({
+    words,
+    textClass,
+  }: {
+    words: string[];
+    textClass?: string;
+  }) {
+    const container = useRef<HTMLSpanElement>(null);
+
+    useEffect(() => {
+      if (!container.current) return;
+      const children = Array.from(container.current.querySelectorAll(".anim-word")) as HTMLElement[];
+      if (!children.length) return;
+
+      // start with all hidden
+      children.forEach((el) => gsap.set(el, { yPercent: 100, autoAlpha: 0 }));
+      // make the first word visible immediately to avoid an empty gap
+      gsap.set(children[0], { yPercent: 0, autoAlpha: 1 });
+
+      const tl = gsap.timeline({ repeat: -1, repeatDelay: 0.6 });
+
+      children.forEach((el) => {
+        tl.to(el, { yPercent: 0, autoAlpha: 1, duration: 0.45, ease: "power2.out" })
+          .to(el, { yPercent: -100, autoAlpha: 0, duration: 0.45, ease: "power2.in" }, "+=0.9");
+      });
+
+      return () => {
+        tl.kill();
+      };
+    }, [words]);
+
+    const longestWord = words.reduce((a, b) => (a.length >= b.length ? a : b), words[0]);
+
+    return (
+      <span
+        className={`inline-block relative align-middle ml-2 overflow-hidden ${textClass ?? ""}`}
+        aria-hidden
+        style={{ lineHeight: 1.1 }}
+      >
+        <span className="invisible block">{longestWord}</span>
+        <span ref={container} className="absolute inset-0 flex font-bold items-center">
+          {words.map((w, i) => (
+            <span
+              key={i}
+              className="anim-word absolute left-0 top-0 whitespace-nowrap text-current"
+              // Ensure words are hidden by default using inline styles so they don't flash
+              // visible when GSAP timelines are not yet initialized or when scrolling remounts occur.
+              style={{ willChange: "transform, opacity", transform: "translateY(100%)", opacity: 0 }}
+            >
+              {w}
+            </span>
+          ))}
+        </span>
+      </span>
+    );
+  }
+
+  // Helper to extract title prefix when animating words
+  const getTitlePrefix = (title: string, words?: string[]) => {
+    if (!words || words.length === 0) return title;
+    const first = words[0];
+    const idx = title.indexOf(first);
+    return idx >= 0 ? title.slice(0, idx) : title;
+  };
+
+  useEffect(() => {
+    if (!cardRef.current || !containerRef.current || isMobile) return;
+
+    const thisStop = sectionProgressStops[index];
+    const nextStop = sectionProgressStops[index + 1] ?? 1;
+    // window after the peak where the card fades out as camera flies past
+    const exitStart = thisStop + (nextStop - thisStop) * 0.35;
+    const exitEnd = thisStop + (nextStop - thisStop) * 0.72;
+
+    const trigger = gsap.to(cardRef.current, {
+      scrollTrigger: {
+        trigger: containerRef.current,
+        start: "top top",
+        end: "bottom bottom",
+        scrub: 0.6,
+        onUpdate: (self) => {
+          const progress = self.progress;
+          let opacity = 0;
+          let blur = 0;
+          let scale = 1;
+
+          if (progress < revealStart) {
+            opacity = index === 0 ? 1 : 0.22;
+            blur = index === 0 ? 0 : 3.2;
+            scale = index === 0 ? 1 : 0.95;
+          } else if (progress < revealEnd) {
+            opacity = gsap.utils.mapRange(revealStart, revealEnd, index === 0 ? 1 : 0.42, 1, progress);
+            blur = gsap.utils.mapRange(revealStart, revealEnd, index === 0 ? 0 : 2.1, 0, progress);
+            scale = gsap.utils.mapRange(revealStart, revealEnd, index === 0 ? 1 : 0.97, 1, progress);
+          } else if (index < cards.length - 1 && progress < exitStart) {
+            opacity = 1;
+            blur = 0;
+            scale = 1;
+          } else if (index < cards.length - 1 && progress < exitEnd) {
+            // fade out as camera flies past this card
+            const t = (progress - exitStart) / (exitEnd - exitStart);
+            opacity = 1 - t;
+            blur = t * 4;
+            scale = 1 + t * 0.06;
+          } else if (index < cards.length - 1) {
+            opacity = 0;
+            blur = 4;
+            scale = 1.06;
+          } else {
+            opacity = 1;
+          }
+
+          gsap.set(cardRef.current, {
+            opacity: Math.min(1, Math.max(0, opacity)),
+            filter: `blur(${blur}px)`,
+            scale,
+          });
+        },
+      },
+      opacity: 1,
+      filter: "blur(0px)",
+      scale: 1,
+      duration: 0,
+    });
+
+    return () => {
+      trigger.scrollTrigger?.kill();
+      trigger.kill();
+    };
+  }, [card, index, isMobile, containerRef, revealStart, revealEnd]);
+
   const isLight = card.tone === "light";
   const alignmentClass =
     isMobile || card.align === "left"
@@ -211,76 +346,34 @@ function BillboardCard({
   const buttonClass = isLight
     ? "border-blue-200 bg-white/72 text-[#124677] hover:bg-blue-50"
     : "border-sky-200/20 bg-white/10 text-sky-50 hover:bg-white/14";
-  const baseRotate = isMobile ? 0 : card.align === "left" ? 8 : -8;
-  const focus = getFocusWindow(index);
-  const upcomingOpacity = useTransform(
-    scrollYProgress,
-    [0, revealStart, revealEnd, 1],
-    [index === 0 ? 1 : 0.22, index === 0 ? 1 : 0.42, 1, 1],
-  );
-  const upcomingBlur = useTransform(
-    scrollYProgress,
-    [0, revealStart, revealEnd, 1],
-    [index === 0 ? 0 : 3.2, index === 0 ? 0 : 2.1, 0, 0],
-  );
-  const upcomingScale = useTransform(
-    scrollYProgress,
-    [0, revealStart, revealEnd, 1],
-    [index === 0 ? 1 : 0.95, index === 0 ? 1 : 0.97, 1, 1],
-  );
-  const straightening = useTransform(
-    scrollYProgress,
-    [focus.start, focus.peak, focus.end],
-    [0, 1, 0],
-  );
-  const activeRotateY = useTransform(
-    straightening,
-    (v) => baseRotate * Math.max(0, 1 - v * 1.45),
-  );
-  const activeReadabilityBoost = useTransform(straightening, [0, 1], [0, 1]);
-  const effectiveBlur = useTransform(
-    () => upcomingBlur.get() * (1 - straightening.get()),
-  );
-  const effectiveOpacity = useTransform(() =>
-    Math.min(1, upcomingOpacity.get() + activeReadabilityBoost.get() * 0.38),
-  );
-  const cardFilter = useMotionTemplate`blur(${effectiveBlur}px)`;
 
   return (
-    <motion.div
+    <div
+      ref={cardRef}
       style={{
         width: isMobile ? "min(90vw, 420px)" : card.width,
-        translateX: isMobile ? 0 : card.x,
-        translateZ: card.z,
-        rotateY: activeRotateY,
-        opacity: effectiveOpacity,
-        filter: cardFilter,
-        scale: upcomingScale,
-      }}
-      animate={{ y: [0, -10 - (index % 3) * 2, 0] }}
-      transition={{
-        duration: 5 + index * 0.25,
-        repeat: Infinity,
-        ease: "easeInOut",
+        transform: isMobile ? "translateX(0)" : `translate3d(${card.x}px, 0, ${card.z}px)`,
       }}
       className={`absolute flex rounded-[1.5rem] border p-5 backdrop-blur-xl sm:rounded-[2rem] sm:p-8 lg:p-10 ${panelClass}`}
     >
-      <motion.div
-        className={`flex w-full flex-col ${alignmentClass}`}
-        style={{
-          opacity: useTransform(activeReadabilityBoost, [0, 1], [0.9, 1]),
-        }}
-      >
+      <div className={`flex w-full flex-col ${alignmentClass}`}>
         <span
           className={`rounded-full border px-4 py-2 text-xs font-semibold uppercase tracking-[0.32em] ${badgeClass}`}
         >
           {card.eyebrow}
         </span>
-        <h2
+        <div
           className={`mt-5 max-w-[22ch] text-2xl font-semibold leading-tight sm:mt-6 sm:text-3xl lg:text-5xl ${titleClass}`}
         >
-          {card.title}
-        </h2>
+          {card.dynamicWords && card.dynamicWords.length ? (
+            <>
+              {getTitlePrefix(card.title, card.dynamicWords)}
+              <AnimatedWords words={card.dynamicWords} textClass={titleClass} />
+            </>
+          ) : (
+            card.title
+          )}
+        </div>
         <p
           className={`mt-4 max-w-[38ch] text-sm leading-6 sm:mt-5 sm:text-base sm:leading-7 lg:text-xl ${bodyClass}`}
         >
@@ -288,12 +381,12 @@ function BillboardCard({
         </p>
         <button
           type="button"
-          className={`mt-6 rounded-full border px-6 py-3 text-sm font-semibold transition duration-300 hover:-translate-y-1 sm:mt-8 ${buttonClass}`}
+          className={`mt-6 rounded-full border px-6 py-3 text-sm font-semibold transition duration-300 hover:-translate-y-1 flex gap-2 items-center sm:mt-8 ${buttonClass}`}
         >
-          {card.cta}
+          {card.cta} <BiRightArrow></BiRightArrow>
         </button>
-      </motion.div>
-    </motion.div>
+      </div>
+    </div>
   );
 }
 
@@ -343,7 +436,16 @@ function MobileCard({ card }: { card: FlightCard }) {
 
 export default function MultiverseFlight() {
   const containerRef = useRef<HTMLDivElement>(null);
+  const stickyRef = useRef<HTMLDivElement>(null);
   const [isMobile, setIsMobile] = useState(false);
+  const [isDark, setIsDark] = useState(false);
+  const [scrollProgress, setScrollProgress] = useState(0);
+  const sceneRef = useRef<HTMLDivElement>(null);
+  const heroImageRef = useRef<HTMLDivElement>(null);
+  const gifRef = useRef<HTMLDivElement>(null);
+  const glowTopRef = useRef<HTMLDivElement>(null);
+  const glowDeepRef = useRef<HTMLDivElement>(null);
+  const movingSceneRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const onResize = () => {
@@ -358,48 +460,150 @@ export default function MultiverseFlight() {
     };
   }, []);
 
-  const { scrollYProgress } = useScroll({
-    target: containerRef,
-    offset: ["start start", "end end"],
-  });
+  useEffect(() => {
+    if (!containerRef.current) return;
 
-  const zCamera = useTransform(
-    scrollYProgress,
-    [0, 1],
-    [0, isMobile ? 7800 : 8400],
-  );
-  const topColor = useTransform(
-    scrollYProgress,
-    [0, 0.28, 0.44, 0.62, 1],
-    ["#ffffff", "#eff6ff", "#0f172a", "#040b1f", "#020617"],
-  );
-  const bottomColor = useTransform(
-    scrollYProgress,
-    [0, 0.28, 0.44, 0.62, 1],
-    ["#eef5ff", "#d8ebff", "#091225", "#020617", "#01030a"],
-  );
-  const sceneBackground = useMotionTemplate`linear-gradient(180deg, ${topColor} 0%, ${bottomColor} 100%)`;
-  const heroImageOpacity = useTransform(
-    scrollYProgress,
-    [0, 0.16, 0.26],
-    [1, 1, 0],
-  );
-  const heroImageX = useTransform(scrollYProgress, [0, 0.26], [0, 120]);
-  const heroImageScale = useTransform(
-    scrollYProgress,
-    [0, 0.2, 0.26],
-    [1, 1.06, 0.84],
-  );
-  const lightGlowOpacity = useTransform(
-    scrollYProgress,
-    [0, 0.28, 0.42],
-    [1, 0.8, 0],
-  );
-  const deepGlowOpacity = useTransform(
-    scrollYProgress,
-    [0.42, 0.58, 1],
-    [0, 0.8, 1],
-  );
+    const scrollTrigger = ScrollTrigger.create({
+      trigger: containerRef.current,
+      start: "top top",
+      end: "bottom bottom",
+      scrub: 0.6,
+      onUpdate: (self) => {
+        const progress = self.progress;
+        setScrollProgress(progress);
+        setIsDark(progress >= 0.36);
+
+        // Color interpolation
+        const getColor = (progress: number, stops: number[], colors: string[]) => {
+          let colorStart = colors[0];
+          let colorEnd = colors[0];
+          let progressStart = 0;
+          let progressEnd = 1;
+
+          for (let i = 0; i < stops.length; i++) {
+            if (progress >= stops[i]) {
+              if (i < stops.length - 1) {
+                colorStart = colors[i];
+                colorEnd = colors[i + 1];
+                progressStart = stops[i];
+                progressEnd = stops[i + 1];
+              } else {
+                colorStart = colors[i];
+                colorEnd = colors[i];
+              }
+            }
+          }
+
+          const ratio = (progress - progressStart) / (progressEnd - progressStart);
+          return ratio > 0.5 ? colorEnd : colorStart;
+        };
+
+        const topColorStops = [0, 0.28, 0.44, 0.62, 1];
+        const topColorValues = ["#ffffff", "#eff6ff", "#0f172a", "#040b1f", "#020617"];
+        const bottomColorStops = [0, 0.28, 0.44, 0.62, 1];
+        const bottomColorValues = ["#eef5ff", "#d8ebff", "#091225", "#020617", "#01030a"];
+
+        const topColor = getColor(progress, topColorStops, topColorValues);
+        const bottomColor = getColor(progress, bottomColorStops, bottomColorValues);
+
+        if (sceneRef.current) {
+          sceneRef.current.style.background = `linear-gradient(180deg, ${topColor} 0%, ${bottomColor} 100%)`;
+        }
+
+        // Hero image opacity, X, and scale
+        let heroOpacity = 1;
+        let heroX = 0;
+        let heroScale = 1;
+        let heroY = 20;
+
+        if (progress < 0.16) {
+          heroOpacity = 1;
+          heroX = 0;
+          heroScale = 1;
+        } else if (progress < 0.42) {
+          const heroProgress = (progress - 0.16) / (0.42 - 0.16);
+          heroOpacity = 1 - (heroProgress * 0.6);
+          heroX = heroProgress * 120;
+          heroScale = 1 + (heroProgress * 0.06 - heroProgress * 0.22);
+          heroY = -14 * heroProgress;
+        } else {
+          heroOpacity = 1;
+          heroX = 120;
+          heroScale = 0.84;
+          heroY = -14;
+        }
+
+        if (heroImageRef.current) {
+          gsap.set(heroImageRef.current, {
+            opacity: heroOpacity,
+            x: heroX,
+            y: heroY,
+            scale: heroScale,
+          });
+        }
+
+        // Glow animations
+        if (glowTopRef.current) {
+          const lightGlowOpacity = progress < 0.28 ? 1 : progress < 0.42 ? 0.8 - (progress - 0.28) / (0.42 - 0.28) * 0.8 : 0;
+          gsap.set(glowTopRef.current, { opacity: lightGlowOpacity });
+        }
+
+        if (glowDeepRef.current) {
+          const deepGlowOpacity = progress < 0.42 ? 0 : progress < 0.58 ? (progress - 0.42) / (0.58 - 0.42) * 0.8 : 0.8;
+          gsap.set(glowDeepRef.current, { opacity: deepGlowOpacity });
+        }
+
+        if (gifRef.current) {
+          // tighter offsets so GIF sits closer to the first card
+          // const gifX = cards[0].x + (isMobile ? 240 : 360);
+          // const gifZ = cards[0].z + (isMobile ? 60 : 120);
+          // const gifY = progress < 0.26 ? 0 : progress < 0.42 ? (progress - 0.26) / (0.42 - 0.26) * -8 : -8;
+          // gsap.set(gifRef.current, {
+          //   opacity: progress < 0.08 ? 0 : 1,
+          //   x: gifX,
+          //   y: gifY,
+          //   z: gifZ + progress * (isMobile ? 60 : 90),
+          // });
+          if (gifRef.current) {
+            // pushed further right so it clears the (up to 780px-wide) first card
+            const gifX = cards[0].x + (isMobile ? 240 : 640);
+            const gifZ = cards[0].z + (isMobile ? 60 : 140);
+            const gifY = progress < 0.26 ? 0 : progress < 0.42 ? (progress - 0.26) / (0.42 - 0.26) * -8 : -8;
+            gsap.set(gifRef.current, {
+              opacity: 1,
+              x: gifX,
+              y: gifY,
+              z: gifZ + progress * (isMobile ? 60 : 90),
+            });
+          }
+        }
+
+        // Camera Z position
+        const zCam = progress * (isMobile ? 7800 : 8400);
+        if (movingSceneRef.current) {
+          movingSceneRef.current.style.transform = `translateZ(${zCam}px)`;
+        }
+      },
+    });
+
+    return () => {
+      scrollTrigger.kill();
+    };
+  }, [isMobile]);
+
+  useEffect(() => {
+    if (!heroImageRef.current) return;
+
+    // Keep the brand/logo static and minimally styled — remove continuous animation.
+    // Use gsap.set only to ensure consistent initial styling across renders.
+    gsap.set(heroImageRef.current, {
+      opacity: 1,
+      x: 0,
+      y: 0,
+      scale: 1,
+      rotateZ: 0,
+    });
+  }, []);
 
   useEffect(() => {
     const handleNavigation = (event: Event) => {
@@ -446,21 +650,15 @@ export default function MultiverseFlight() {
   }, []);
 
   useEffect(() => {
-    const unsubscribe = scrollYProgress.on("change", (value) => {
-      const progress = Math.min(1, Math.max(0, value));
-      const activeId = getActiveSectionId(progress);
+    const progress = Math.min(1, Math.max(0, scrollProgress));
+    const activeId = getActiveSectionId(progress);
 
-      window.dispatchEvent(
-        new CustomEvent("flight-progress-update", {
-          detail: { progress, activeId },
-        }),
-      );
-    });
-
-    return () => {
-      unsubscribe();
-    };
-  }, [scrollYProgress]);
+    window.dispatchEvent(
+      new CustomEvent("flight-progress-update", {
+        detail: { progress, activeId },
+      }),
+    );
+  }, [scrollProgress]);
 
   if (isMobile) {
     return (
@@ -482,65 +680,84 @@ export default function MultiverseFlight() {
 
   return (
     <>
+      <SpaceParticles />
       <div
         ref={containerRef}
         className="relative h-[1100vh] w-full bg-transparent"
       >
-        <div className="sticky top-0 flex h-screen w-screen items-center justify-center overflow-hidden [perspective:1100px]">
-          <motion.div
+        <div
+          ref={stickyRef}
+          className="sticky top-0 flex h-screen w-screen items-center justify-center overflow-hidden [perspective:1100px]"
+        >
+          <div
+            ref={sceneRef}
             className="absolute inset-0"
-            style={{ background: sceneBackground, opacity: 0.8 }}
+            style={{ opacity: 0.8 }}
           />
-          <motion.div
+          <div
+            ref={glowTopRef}
             className="absolute inset-x-0 top-0 h-[45vh] bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.9),_transparent_62%)]"
-            style={{ opacity: lightGlowOpacity }}
           />
-          <motion.div
+          <div
+            ref={glowDeepRef}
             className="absolute inset-0 bg-[radial-gradient(circle_at_50%_55%,_rgba(56,189,248,0.12),_transparent_48%)]"
-            style={{ opacity: deepGlowOpacity }}
           />
 
-          <motion.div
-            className="pointer-events-none absolute right-[7vw] top-1/2 hidden h-[52vh] w-[24vw] min-w-[260px] -translate-y-1/2 rounded-[2.2rem] border border-white/40 bg-white/10 p-6 backdrop-blur-md lg:flex"
-            style={{
-              opacity: heroImageOpacity,
-              x: heroImageX,
-              scale: heroImageScale,
-            }}
-            animate={{ y: [0, -14, 0], rotateZ: [0, 1.2, 0] }}
-            transition={{ duration: 5.5, repeat: Infinity, ease: "easeInOut" }}
+          <div
+            ref={heroImageRef}
+            // place logo near the bottom-right on large screens with minimal animation
+            className="pointer-events-none absolute right-[7vw] bottom-0 hidden w-[24vw] min-w-[260px] rounded-[2.2rem] bg-white/10 p-6 backdrop-blur-md lg:flex"
           >
             <div className="relative flex w-full items-center justify-center overflow-hidden rounded-[1.8rem]">
               <Image
-                src="/EFR-3D.png"
+                src={isDark ? "/EFR-3D.png" : "/EFR-B-3D.png"}
                 alt="EFR 3D Logo"
                 width={520}
                 height={360}
-                className="h-full w-full object-contain mix-blend-multiply"
+                className={`h-full w-full object-contain ${isDark ? "mix-blend-multiply" : "mix-blend-screen"}`}
                 priority
               />
             </div>
-          </motion.div>
+          </div>
 
-          <motion.div
+          <div
+            ref={movingSceneRef}
             style={{
-              translateZ: zCamera,
               transformStyle: "preserve-3d",
             }}
             className="absolute inset-0 flex items-center justify-center"
           >
+            <div
+              ref={gifRef}
+              className="pointer-events-none absolute hidden h-[40vh] w-[18vw] min-w-[220px] rounded-[2rem] border border-white/30 bg-white/10 p-4 shadow-xl backdrop-blur-xl lg:flex z-0"
+              style={{
+                opacity: 1,
+                transform: `translate3d(${cards[0].x + 640}px, -12px, ${cards[0].z + 140}px)`,
+              }}
+            >
+              <div className="relative flex h-full w-full items-center justify-center overflow-hidden rounded-[1.8rem]">
+                <Image
+                  src="/h-c3.gif"
+                  alt="Flight animation"
+                  width={320}
+                  height={320}
+                  className="h-full w-full object-contain"
+                  priority
+                />
+              </div>
+            </div>
             {cards.map((card, index) => (
               <BillboardCard
                 key={card.id}
                 card={card}
                 index={index}
                 isMobile={isMobile}
-                scrollYProgress={scrollYProgress}
+                containerRef={containerRef}
                 revealStart={getRevealWindow(index).start}
                 revealEnd={getRevealWindow(index).end}
               />
             ))}
-          </motion.div>
+          </div>
         </div>
       </div>
       <TrustedPartnersBillboard />

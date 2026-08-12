@@ -218,18 +218,50 @@ function BillboardCard({
       const children = Array.from(container.current.querySelectorAll(".anim-word")) as HTMLElement[];
       if (!children.length) return;
 
-      // start with all hidden
-      children.forEach((el) => gsap.set(el, { yPercent: 100, autoAlpha: 0 }));
-      // make the first word visible immediately to avoid an empty gap
-      gsap.set(children[0], { yPercent: 0, autoAlpha: 1 });
+      // Start with all hidden and rotated
+      children.forEach((el) => 
+        gsap.set(el, { 
+          rotationX: 90, 
+          autoAlpha: 0,
+          transformOrigin: "center center",
+        })
+      );
+      
+      // Make the first word visible immediately
+      gsap.set(children[0], { rotationX: 0, autoAlpha: 1 });
 
-      const tl = gsap.timeline({ repeat: -1, repeatDelay: 1 });
+      const tl = gsap.timeline({ repeat: -1, repeatDelay: 0.5 });
 
-      children.forEach((el) => {
-        // Animate in (0.6s) + stay visible (3.5s) + fade out (0.6s) = 4.7s per word
-        tl.to(el, { yPercent: 0, autoAlpha: 1, duration: 0.6, ease: "power2.out" })
-          .to(el, { yPercent: 0, autoAlpha: 1, duration: 3.5 }, "+=0") // Stay visible for 3.5s
-          .to(el, { yPercent: -100, autoAlpha: 0, duration: 0.6, ease: "power2.in" });
+      children.forEach((el, index) => {
+        // 3D flip in from back
+        tl.to(
+          el, 
+          { 
+            rotationX: 0, 
+            autoAlpha: 1, 
+            duration: 0.6, 
+            ease: "back.out"
+          },
+          index === 0 ? 0 : "+=0"
+        );
+        
+        // Stay visible and static
+        tl.to(
+          el,
+          { duration: 3.5 },
+          "+=0"
+        );
+        
+        // 3D flip out to back
+        tl.to(
+          el,
+          {
+            rotationX: -90,
+            autoAlpha: 0,
+            duration: 0.6,
+            ease: "back.in"
+          }
+        );
       });
 
       return () => {
@@ -243,7 +275,10 @@ function BillboardCard({
       <span
         className={`inline-block relative align-middle ml-2 overflow-hidden ${textClass ?? ""}`}
         aria-hidden
-        style={{ lineHeight: 1.1 }}
+        style={{ 
+          lineHeight: 1.1,
+          perspective: "1000px"
+        }}
       >
         <span className="invisible block">{longestWord}</span>
         <span ref={container} className="absolute inset-0 flex font-bold items-center">
@@ -251,9 +286,10 @@ function BillboardCard({
             <span
               key={i}
               className="anim-word absolute left-0 top-0 whitespace-nowrap text-current"
-              // Ensure words are hidden by default using inline styles so they don't flash
-              // visible when GSAP timelines are not yet initialized or when scrolling remounts occur.
-              style={{ willChange: "transform, opacity", transform: "translateY(100%)", opacity: 0 }}
+              style={{ 
+                willChange: "transform, opacity",
+                transformStyle: "preserve-3d",
+              }}
             >
               {w}
             </span>

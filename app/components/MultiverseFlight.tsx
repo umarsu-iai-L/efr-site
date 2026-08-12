@@ -223,11 +223,11 @@ function BillboardCard({
       // make the first word visible immediately to avoid an empty gap
       gsap.set(children[0], { yPercent: 0, autoAlpha: 1 });
 
-      const tl = gsap.timeline({ repeat: -1, repeatDelay: 0.6 });
+      const tl = gsap.timeline({ repeat: -1, repeatDelay: 0.3 });
 
       children.forEach((el) => {
-        tl.to(el, { yPercent: 0, autoAlpha: 1, duration: 0.45, ease: "power2.out" })
-          .to(el, { yPercent: -100, autoAlpha: 0, duration: 0.45, ease: "power2.in" }, "+=0.9");
+        tl.to(el, { yPercent: 0, autoAlpha: 1, duration: 0.5, ease: "power2.out" })
+          .to(el, { yPercent: -100, autoAlpha: 0, duration: 0.5, ease: "power2.in" }, "+=2.2");
       });
 
       return () => {

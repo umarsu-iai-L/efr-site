@@ -277,18 +277,29 @@ function BillboardCard({
         aria-hidden
         style={{ 
           lineHeight: 1.1,
-          perspective: "1000px"
+          perspective: "1000px",
+          display: "inline-flex",
+          alignItems: "center"
         }}
       >
-        <span className="invisible block">{longestWord}</span>
-        <span ref={container} className="absolute inset-0 flex font-bold items-center">
+        <span className="invisible absolute whitespace-nowrap">{longestWord}</span>
+        <span 
+          ref={container} 
+          className="relative inline-flex items-center justify-start font-bold"
+          style={{
+            position: "relative",
+            width: "auto",
+            height: "1em"
+          }}
+        >
           {words.map((w, i) => (
             <span
               key={i}
-              className="anim-word absolute left-0 top-0 whitespace-nowrap text-current"
+              className="anim-word absolute left-0 top-1/2 whitespace-nowrap text-current"
               style={{ 
                 willChange: "transform, opacity",
                 transformStyle: "preserve-3d",
+                transform: "translateY(-50%)",
               }}
             >
               {w}

@@ -4,7 +4,7 @@ import dynamic from "next/dynamic";
 import gsap from "gsap";
 import ScrollTrigger from "gsap/ScrollTrigger";
 import Image from "next/image";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import SpaceParticles from "./SpaceParticles";
 import { BiRightArrow } from "react-icons/bi";
 
@@ -155,15 +155,16 @@ const sectionProgressMap: Record<string, number> = {
 
 const sectionProgressStops = cards.map((card) => sectionProgressMap[card.id]);
 
-// Scroll targets that land past each card's revealEnd so it's fully sharp on arrival.
+// Scroll targets tuned to land in each card's stable focus zone (not oversized/exit phase).
 const sectionNavTargetMap: Record<string, number> = Object.fromEntries(
   cards.map((card, index) => [
     card.id,
     index === 0 ? 0 : (() => {
-      const previous = sectionProgressStops[index - 1];
       const current = sectionProgressStops[index];
-      const span = Math.max(current - previous, 0.08);
-      return Math.min(current + span * 0.16, 1);
+      const next = sectionProgressStops[index + 1] ?? 1;
+      const rightSpan = Math.max(next - current, 0.08);
+      const settleOffset = Math.min(rightSpan * 0.18, 0.032);
+      return Math.min(current + settleOffset, next - 0.018, 1);
     })(),
   ])
 );
@@ -214,6 +215,30 @@ function getFocusWindow(index: number) {
   };
 }
 
+function easeInOutCubic(t: number) {
+  return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+}
+
+function animateWindowScrollTo(targetY: number, duration = 1000) {
+  if (typeof window === "undefined") return;
+
+  const startY = window.scrollY;
+  const deltaY = targetY - startY;
+  const startTime = performance.now();
+
+  const tick = (now: number) => {
+    const elapsed = Math.min(1, (now - startTime) / duration);
+    const eased = easeInOutCubic(elapsed);
+    window.scrollTo({ top: startY + deltaY * eased, behavior: "auto" });
+
+    if (elapsed < 1) {
+      requestAnimationFrame(tick);
+    }
+  };
+
+  requestAnimationFrame(tick);
+}
+
 function BillboardCard({
   card,
   index,
@@ -229,7 +254,32 @@ function BillboardCard({
   revealStart: number;
   revealEnd: number;
 }) {
+  const shouldPreMountContent = index <= 1;
+  const mountLead = index <= 1 ? 0.02 : 0.06;
   const cardRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const parallaxRef = useRef<HTMLDivElement>(null);
+  const contentMountedRef = useRef(shouldPreMountContent);
+  const contentAnimatedRef = useRef(shouldPreMountContent);
+  const [contentMounted, setContentMounted] = useState(shouldPreMountContent);
+
+  // GSAP owns the desktop transform so React re-renders never stomp it
+  useLayoutEffect(() => {
+    if (isMobile || !cardRef.current) return;
+    gsap.set(cardRef.current, { x: card.x, z: card.z, opacity: index === 0 ? 1 : 0 });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Stagger home card content in on mount
+  useEffect(() => {
+    if (index !== 0 || isMobile || !contentRef.current) return;
+    const els = Array.from(contentRef.current.children);
+    gsap.fromTo(els,
+      { y: 14, autoAlpha: 0 },
+      { y: 0, autoAlpha: 1, stagger: 0.1, duration: 0.6, ease: "power2.out", delay: 0.4 }
+    );
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // AnimatedWords component: cycles through provided words using GSAP
   function AnimatedWords({
@@ -307,17 +357,17 @@ function BillboardCard({
           lineHeight: 1.1,
           perspective: "1000px",
           display: "inline-flex",
-          alignItems: "center"
+          alignItems: "center",
+          width: "max-content",
         }}
       >
-        <span className="invisible absolute whitespace-nowrap">{longestWord}</span>
+        <span className="invisible whitespace-nowrap font-bold">{longestWord}</span>
         <span
           ref={container}
-          className="relative inline-flex items-center justify-start font-bold"
+          className="pointer-events-none absolute left-0 top-1/2 inline-flex -translate-y-1/2 items-center justify-start font-bold"
           style={{
-            position: "relative",
-            width: "auto",
-            height: "1em"
+            height: "1em",
+            width: "100%",
           }}
         >
           {words.map((w, i) => (
@@ -363,6 +413,28 @@ function BillboardCard({
         scrub: 0.6,
         onUpdate: (self) => {
           const progress = self.progress;
+
+          // Lazy-mount content just before the card becomes visible
+          if (!contentMountedRef.current && progress >= Math.max(0, revealStart - mountLead)) {
+            contentMountedRef.current = true;
+            setContentMounted(true);
+          }
+
+          if (
+            contentMountedRef.current &&
+            !contentAnimatedRef.current &&
+            contentRef.current &&
+            progress >= Math.max(0, revealStart + 0.005)
+          ) {
+            contentAnimatedRef.current = true;
+            const els = Array.from(contentRef.current.children);
+            gsap.fromTo(
+              els,
+              { y: 18, autoAlpha: 0 },
+              { y: 0, autoAlpha: 1, stagger: 0.1, duration: 0.65, ease: "power3.out" },
+            );
+          }
+
           let opacity = 0;
           let blur = 0;
           let scale = 1;
@@ -422,61 +494,148 @@ function BillboardCard({
   const panelClass = isLight
     ? "border-white/85 bg-white/74 shadow-[0_20px_64px_rgba(20,40,90,0.16)]"
     : "border-white/20 bg-slate-950/78 shadow-[0_24px_90px_rgba(2,8,23,0.52)]";
+  const loaderPanelClass =
+    "border-white/30 bg-white/14 shadow-[0_20px_64px_rgba(20,40,90,0.14)]";
   const badgeClass = isLight
     ? "border-[#124677]/15 bg-[#124677]/10 text-[#124677]"
     : "border-sky-200/12 bg-sky-200/8 text-sky-100";
   const buttonClass = isLight
     ? "border-blue-200 bg-white/72 text-[#124677] hover:bg-blue-50"
     : "border-sky-200/20 bg-white/10 text-sky-50 hover:bg-white/14";
+  const loaderTintClass = isLight ? "bg-white/35" : "bg-white/18";
+  const loaderLineClass = isLight ? "bg-[#124677]/12" : "bg-white/22";
+
+  const handleParallaxMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (isMobile || !parallaxRef.current || window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      return;
+    }
+
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const x = (event.clientX - bounds.left) / bounds.width - 0.5;
+    const y = (event.clientY - bounds.top) / bounds.height - 0.5;
+
+    gsap.to(parallaxRef.current, {
+      x: x * 14,
+      y: y * 10,
+      rotateY: x * 4,
+      rotateX: y * -4,
+      duration: 0.45,
+      ease: "power3.out",
+      overwrite: "auto",
+    });
+  };
+
+  const resetParallax = () => {
+    if (!parallaxRef.current) return;
+
+    gsap.to(parallaxRef.current, {
+      x: 0,
+      y: 0,
+      rotateX: 0,
+      rotateY: 0,
+      duration: 0.8,
+      ease: "elastic.out(1, 0.45)",
+      overwrite: "auto",
+    });
+  };
 
   return (
     <div
       ref={cardRef}
+      onPointerMove={handleParallaxMove}
+      onPointerLeave={resetParallax}
       style={{
         width: isMobile ? "min(90vw, 420px)" : card.width,
-        transform: isMobile ? "translateX(0)" : `translate3d(${card.x}px, 0, ${card.z}px)`,
+        // desktop transform is set by GSAP via useLayoutEffect; only mobile needs inline transform
+        ...(isMobile ? { transform: "translateX(0)" } : {}),
       }}
-      className={`absolute flex rounded-[1.5rem] border p-5 backdrop-blur-xl sm:rounded-[2rem] sm:p-8 lg:p-10 ${panelClass}`}
+      className={`absolute flex rounded-[1.5rem] border p-5 backdrop-blur-xl sm:rounded-[2rem] sm:p-8 lg:p-10 ${contentMounted ? panelClass : loaderPanelClass}`}
     >
-      <div className={`flex w-full flex-col ${alignmentClass}`}>
-        <span
-          className={`rounded-full border px-4 py-2 text-xs font-semibold uppercase tracking-[0.32em] ${badgeClass}`}
-        >
-          {card.eyebrow}
-        </span>
+      {contentMounted ? (
         <div
-          className={`mt-5 max-w-[22ch] text-2xl font-semibold leading-tight sm:mt-6 sm:text-3xl lg:text-5xl ${titleClass}`}
+          ref={parallaxRef}
+          className="flex w-full flex-col [transform-style:preserve-3d]"
+          style={{ willChange: "transform" }}
         >
-          {card.dynamicWords && card.dynamicWords.length ? (
-            <>
-              {getTitlePrefix(card.title, card.dynamicWords)}
-              <AnimatedWords words={card.dynamicWords} textClass={titleClass} />
-            </>
-          ) : (
-            card.title
-          )}
+          <div ref={contentRef} className={`flex w-full flex-col ${alignmentClass}`}>
+          <span
+            className={`rounded-full border px-4 py-2 text-xs font-semibold uppercase tracking-[0.32em] ${badgeClass}`}
+          >
+            {card.eyebrow}
+          </span>
+          <div
+            className={`mt-5 max-w-[22ch] text-2xl font-semibold leading-tight sm:mt-6 sm:text-3xl lg:text-5xl ${titleClass}`}
+          >
+            {card.dynamicWords && card.dynamicWords.length ? (
+              <>
+                {getTitlePrefix(card.title, card.dynamicWords)}
+                <AnimatedWords words={card.dynamicWords} textClass={titleClass} />
+              </>
+            ) : (
+              card.title
+            )}
+          </div>
+          <p
+            className={`mt-4 max-w-[38ch] text-sm leading-6 sm:mt-5 sm:text-base sm:leading-7 lg:text-xl ${bodyClass}`}
+          >
+            {card.description}
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              const route = cardRoutes[card.id];
+              if (route) dispatchPageTransition(route);
+            }}
+            className={`mt-6 rounded-full border px-6 py-3 text-sm font-semibold transition duration-300 hover:-translate-y-1 flex gap-2 items-center sm:mt-8 ${buttonClass}${cardRoutes[card.id] ? "" : " opacity-0 pointer-events-none"}`}
+          >
+            {card.cta} <BiRightArrow />
+          </button>
+          </div>
         </div>
-        <p
-          className={`mt-4 max-w-[38ch] text-sm leading-6 sm:mt-5 sm:text-base sm:leading-7 lg:text-xl ${bodyClass}`}
+      ) : (
+        <div
+          aria-hidden="true"
+          className={`pointer-events-none relative flex h-full min-h-[240px] w-full items-stretch overflow-hidden rounded-[1.25rem] ${loaderTintClass}`}
         >
-          {card.description}
-        </p>
-        <button
-          type="button"
-          onClick={() => {
-            const route = cardRoutes[card.id];
-            if (route) dispatchPageTransition(route);
-          }}
-          className={`mt-6 rounded-full border px-6 py-3 text-sm font-semibold transition duration-300 hover:-translate-y-1 flex gap-2 items-center sm:mt-8 ${buttonClass}${cardRoutes[card.id] ? "" : " opacity-0 pointer-events-none"}`}
-        >
-          {card.cta} <BiRightArrow />
-        </button>
-      </div>
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(255,255,255,0.38),transparent_42%),radial-gradient(circle_at_80%_70%,rgba(255,255,255,0.22),transparent_38%)] opacity-90" />
+          <div className="absolute inset-0 backdrop-blur-md" />
+          <div className="absolute inset-0 bg-[linear-gradient(115deg,transparent_0%,rgba(255,255,255,0.24)_30%,transparent_55%)] animate-pulse" />
+          <div className={`relative z-10 flex w-full flex-col ${alignmentClass} justify-end gap-3 p-6 opacity-90`}>
+            <div className={`h-9 w-34 rounded-full border ${loaderLineClass}`} />
+            <div className={`h-8 w-3/4 rounded-xl ${loaderLineClass}`} />
+            <div className={`h-8 w-2/3 rounded-xl ${loaderLineClass}`} />
+            <div className={`mt-1 h-4 w-5/6 rounded-full ${loaderLineClass}`} />
+            <div className={`h-4 w-2/3 rounded-full ${loaderLineClass}`} />
+            <div className={`mt-2 h-11 w-32 rounded-full border ${loaderLineClass}`} />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
 function MobileCard({ card }: { card: FlightCard }) {
+  const sectionRef = useRef<HTMLElement>(null);
+  const mountedRef = useRef(false);
+  const [contentMounted, setContentMounted] = useState(false);
+
+  useEffect(() => {
+    const el = sectionRef.current;
+    if (!el) return;
+    const obs = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting && !mountedRef.current) {
+          mountedRef.current = true;
+          setContentMounted(true);
+          obs.disconnect();
+        }
+      },
+      { rootMargin: "300px 0px" },
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, []);
+
   const isLight = card.tone === "light";
   const titleClass = isLight ? "text-[#124677]" : "text-sky-100";
   const bodyClass = isLight ? "text-slate-600" : "text-slate-300";
@@ -492,34 +651,40 @@ function MobileCard({ card }: { card: FlightCard }) {
 
   return (
     <section
+      ref={sectionRef}
       id={`section-${card.id}`}
       className={`w-full rounded-3xl border p-5 backdrop-blur-xl sm:p-6 ${panelClass}`}
+      style={{ minHeight: "180px" }}
     >
-      <div className="flex w-full flex-col items-start text-left">
-        <span
-          className={`rounded-full border px-4 py-2 text-xs font-semibold uppercase tracking-[0.22em] ${badgeClass}`}
-        >
-          {card.eyebrow}
-        </span>
-        <h2
-          className={`mt-4 text-2xl font-semibold leading-tight ${titleClass}`}
-        >
-          {card.title}
-        </h2>
-        <p className={`mt-3 text-sm leading-6 ${bodyClass}`}>
-          {card.description}
-        </p>
-        <button
-          type="button"
-          onClick={() => {
-            const route = cardRoutes[card.id];
-            if (route) dispatchPageTransition(route);
-          }}
-          className={`mt-5 rounded-full border px-5 py-2.5 text-sm font-semibold transition duration-300 ${buttonClass}${cardRoutes[card.id] ? "" : " opacity-0 pointer-events-none"}`}
-        >
-          {card.cta}
-        </button>
-      </div>
+      {contentMounted ? (
+        <div className="flex w-full flex-col items-start text-left">
+          <span className={`rounded-full border px-4 py-2 text-xs font-semibold uppercase tracking-[0.22em] ${badgeClass}`}>
+            {card.eyebrow}
+          </span>
+          <h2 className={`mt-4 text-2xl font-semibold leading-tight ${titleClass}`}>
+            {card.title}
+          </h2>
+          <p className={`mt-3 text-sm leading-6 ${bodyClass}`}>{card.description}</p>
+          <button
+            type="button"
+            onClick={() => {
+              const route = cardRoutes[card.id];
+              if (route) dispatchPageTransition(route);
+            }}
+            className={`mt-5 rounded-full border px-5 py-2.5 text-sm font-semibold transition duration-300 ${buttonClass}${cardRoutes[card.id] ? "" : " opacity-0 pointer-events-none"}`}
+          >
+            {card.cta}
+          </button>
+        </div>
+      ) : (
+        <div className="animate-pulse space-y-3 pt-1">
+          <div className="h-5 w-24 rounded-full bg-current opacity-10" />
+          <div className="h-7 w-4/5 rounded-lg bg-current opacity-10" />
+          <div className="h-4 w-full rounded-md bg-current opacity-[0.07]" />
+          <div className="h-4 w-3/4 rounded-md bg-current opacity-[0.07]" />
+          <div className="mt-3 h-9 w-28 rounded-full bg-current opacity-10" />
+        </div>
+      )}
     </section>
   );
 }
@@ -559,40 +724,54 @@ export default function MultiverseFlight() {
       end: "bottom bottom",
       scrub: 0.6,
       onUpdate: (self) => {
-        // Cap at 0.96 so the camera doesn't overshoot the last (contact) card.
-        const progress = Math.min(self.progress, 0.96);
+        const progress = self.progress;
         setScrollProgress(progress);
         setIsDark(progress >= 0.36);
 
-        // Color interpolation
-        const getColor = (progress: number, stops: number[], colors: string[]) => {
-          let colorStart = colors[0];
-          let colorEnd = colors[0];
-          let progressStart = 0;
-          let progressEnd = 1;
+        // Smooth color interpolation
+        const hexToRgb = (hex: string) => {
+          const normalized = hex.replace("#", "");
+          const value = parseInt(normalized, 16);
+          return {
+            r: (value >> 16) & 255,
+            g: (value >> 8) & 255,
+            b: value & 255,
+          };
+        };
 
-          for (let i = 0; i < stops.length; i++) {
-            if (progress >= stops[i]) {
-              if (i < stops.length - 1) {
-                colorStart = colors[i];
-                colorEnd = colors[i + 1];
-                progressStart = stops[i];
-                progressEnd = stops[i + 1];
-              } else {
-                colorStart = colors[i];
-                colorEnd = colors[i];
-              }
+        const rgbToHex = (r: number, g: number, b: number) => {
+          const toHex = (n: number) => Math.max(0, Math.min(255, Math.round(n))).toString(16).padStart(2, "0");
+          return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+        };
+
+        const getColor = (progress: number, stops: number[], colors: string[]) => {
+          if (progress <= stops[0]) return colors[0];
+          if (progress >= stops[stops.length - 1]) return colors[colors.length - 1];
+
+          for (let i = 0; i < stops.length - 1; i++) {
+            const start = stops[i];
+            const end = stops[i + 1];
+
+            if (progress >= start && progress <= end) {
+              const t = (progress - start) / Math.max(end - start, 0.0001);
+              const c1 = hexToRgb(colors[i]);
+              const c2 = hexToRgb(colors[i + 1]);
+
+              return rgbToHex(
+                c1.r + (c2.r - c1.r) * t,
+                c1.g + (c2.g - c1.g) * t,
+                c1.b + (c2.b - c1.b) * t,
+              );
             }
           }
 
-          const ratio = (progress - progressStart) / (progressEnd - progressStart);
-          return ratio > 0.5 ? colorEnd : colorStart;
+          return colors[colors.length - 1];
         };
 
-        const topColorStops = [0, 0.28, 0.44, 0.62, 1];
-        const topColorValues = ["#ffffff", "#eff6ff", "#0f172a", "#040b1f", "#020617"];
-        const bottomColorStops = [0, 0.28, 0.44, 0.62, 1];
-        const bottomColorValues = ["#eef5ff", "#d8ebff", "#091225", "#020617", "#01030a"];
+        const topColorStops = [0, 0.16, 0.3, 0.5, 0.7, 0.84, 1];
+        const topColorValues = ["#ffffff", "#eff6ff", "#124677", "#124677", "#0f172a", "#040b1f", "#020617"];
+        const bottomColorStops = [0, 0.16, 0.3, 0.5, 0.7, 0.84, 1];
+        const bottomColorValues = ["#eef5ff", "#d8ebff", "#124677", "#124677", "#091225", "#020617", "#01030a"];
 
         const topColor = getColor(progress, topColorStops, topColorValues);
         const bottomColor = getColor(progress, bottomColorStops, bottomColorValues);
@@ -662,7 +841,7 @@ export default function MultiverseFlight() {
 
     // Keep the brand/logo static and minimally styled — remove continuous animation.
     // Use gsap.set only to ensure consistent initial styling across renders.
-    gsap.set(heroImageRef.current, { opacity: 1 });
+    gsap.set(heroImageRef.current, { opacity: 1, x: 0, y: 0, scale: 1 });
   }, []);
 
   useEffect(() => {
@@ -673,6 +852,9 @@ export default function MultiverseFlight() {
         ? sectionNavTargetMap[targetId]
         : undefined;
       const container = containerRef.current;
+      const prefersReducedMotion = window.matchMedia(
+        "(prefers-reduced-motion: reduce)",
+      ).matches;
 
       if (window.innerWidth < 1024 && targetId) {
         document.getElementById(`section-${targetId}`)?.scrollIntoView({
@@ -689,11 +871,14 @@ export default function MultiverseFlight() {
       const containerTop =
         window.scrollY + container.getBoundingClientRect().top;
       const scrollableHeight = container.offsetHeight - window.innerHeight;
+      const targetTop = containerTop + scrollableHeight * targetProgress;
 
-      window.scrollTo({
-        top: containerTop + scrollableHeight * targetProgress,
-        behavior: "smooth",
-      });
+      if (prefersReducedMotion) {
+        window.scrollTo({ top: targetTop, behavior: "auto" });
+        return;
+      }
+
+      animateWindowScrollTo(targetTop, 950);
     };
 
     window.addEventListener(

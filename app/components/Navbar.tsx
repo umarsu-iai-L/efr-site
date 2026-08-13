@@ -156,24 +156,24 @@ export default function NeumorphicNavbar() {
     : "bg-[linear-gradient(90deg,#2f78bc,#124677)]";
 
   return (
-    <nav className="fixed bottom-4 left-1/2 z-40 w-[calc(100%-2rem)] max-w-5xl -translate-x-1/2">
+    <nav className="fixed bottom-4 left-1/2 z-40 w-[calc(100%-2rem)] max-w-5xl -translate-x-1/2 lg:bottom-auto lg:left-4 lg:top-1/2 lg:w-auto lg:max-w-none lg:-translate-x-0 lg:-translate-y-1/2">
       <div className={`relative overflow-hidden rounded-2xl border shadow-[0_16px_48px_rgba(15,23,42,0.18)] backdrop-blur-xl transition-colors duration-500 ${panelBg}`}>
 
-        <div className="flex items-center gap-1 px-3 py-2 sm:px-4">
+        <div className="flex items-center gap-1 px-3 py-2 sm:px-4 lg:flex-col lg:px-2 lg:py-3">
           {/* Logo */}
           <button
             type="button"
             onClick={() => handleNavigate("home")}
             aria-label="Go to home"
-            className="mr-1 shrink-0 flex items-center"
+            className="mr-1 flex shrink-0 items-center lg:mr-0 lg:mb-1"
           >
             <EfrLogo width={64} height={28} className="h-7 w-auto" />
           </button>
 
-          <div className={`mx-2 h-6 w-px shrink-0 ${dividerColor}`} />
+          <div className={`mx-2 h-6 w-px shrink-0 lg:mx-0 lg:h-px lg:w-12 ${dividerColor}`} />
 
           {/* Nav links */}
-          <div className="flex flex-1 items-center justify-between gap-0.5 overflow-x-auto scrollbar-none">
+          <div className="flex flex-1 items-center justify-between gap-0.5 overflow-x-auto scrollbar-none lg:flex-col lg:overflow-visible">
             {navLinks.map((link) => {
               const isActive = activeId === link.id;
               return (
@@ -183,7 +183,7 @@ export default function NeumorphicNavbar() {
                   onClick={() => handleNavigate(link.id)}
                   aria-label={link.label}
                   aria-current={isActive ? "page" : undefined}
-                  className="group relative flex min-w-0 flex-col items-center gap-0.5 rounded-xl px-2.5 py-1.5 transition-all duration-200 hover:bg-black/5 active:scale-95"
+                  className="group relative flex min-w-0 flex-col items-center gap-0.5 rounded-xl px-2.5 py-1.5 transition-all duration-200 hover:bg-black/5 active:scale-95 lg:w-20 lg:px-2"
                 >
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
@@ -200,7 +200,7 @@ export default function NeumorphicNavbar() {
                     {link.label}
                   </span>
                   {isActive && (
-                    <span className={`absolute -bottom-0.5 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full ${activeDot}`} />
+                    <span className={`absolute -bottom-0.5 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full lg:-bottom-auto lg:-left-2 lg:top-1/2 lg:-translate-y-1/2 lg:translate-x-0 ${activeDot}`} />
                   )}
                 </button>
               );
@@ -209,10 +209,16 @@ export default function NeumorphicNavbar() {
         </div>
 
         {/* Horizontal progress strip */}
-        <div className={`absolute bottom-0 left-0 h-0.5 w-full ${trackColor}`}>
+        <div className={`absolute bottom-0 left-0 h-0.5 w-full lg:hidden ${trackColor}`}>
           <div
             className={`h-full rounded-full transition-[width] duration-500 ease-out ${fillColor}`}
             style={{ width: `${Math.max(2, journeyProgress * 100)}%` }}
+          />
+        </div>
+        <div className={`absolute bottom-0 left-0 hidden h-full w-0.5 lg:block ${trackColor}`}>
+          <div
+            className={`w-full rounded-full transition-[height] duration-500 ease-out ${fillColor}`}
+            style={{ height: `${Math.max(2, journeyProgress * 100)}%` }}
           />
         </div>
       </div>

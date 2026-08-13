@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
 import Navbar from "./components/Navbar";
+import PageTransition from "./components/PageTransition";
 import SpaceParticles from "./components/SpaceParticles";
 
 const urbanist = localFont({
@@ -44,6 +45,7 @@ export default function RootLayout({
         <SpaceParticles />
         <Navbar />
         <main className="relative z-10">{children}</main>
+        <PageTransition />
       </body>
     </html>
   );

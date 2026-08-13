@@ -1,7 +1,7 @@
 import dynamic from "next/dynamic";
 
 const MultiverseFlight = dynamic(() => import("./components/MultiverseFlight"), {
-  loading: () => <div className="h-screen bg-black" />,
+  loading: () => <div className="h-screen bg-transparent" />,
 });
 
 export default function Home() {

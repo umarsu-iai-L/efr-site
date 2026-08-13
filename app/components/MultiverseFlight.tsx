@@ -8,6 +8,21 @@ import React, { useEffect, useRef, useState } from "react";
 import SpaceParticles from "./SpaceParticles";
 import { BiRightArrow } from "react-icons/bi";
 
+const cardRoutes: Record<string, string> = {
+  about: "/about",
+  services: "/services",
+  innovation: "/innovation",
+  press: "/press",
+  career: "/career",
+  contact: "/contact",
+};
+
+function dispatchPageTransition(route: string) {
+  window.dispatchEvent(
+    new CustomEvent("page-transition-start", { detail: { route } }),
+  );
+}
+
 const TrustedPartnersBillboard = dynamic(() => import("./TrustedPartners"), {
   loading: () => <div className="h-20 bg-gradient-to-b from-black/50 to-transparent" />,
   ssr: true,
@@ -140,6 +155,19 @@ const sectionProgressMap: Record<string, number> = {
 
 const sectionProgressStops = cards.map((card) => sectionProgressMap[card.id]);
 
+// Scroll targets that land past each card's revealEnd so it's fully sharp on arrival.
+const sectionNavTargetMap: Record<string, number> = Object.fromEntries(
+  cards.map((card, index) => [
+    card.id,
+    index === 0 ? 0 : (() => {
+      const previous = sectionProgressStops[index - 1];
+      const current = sectionProgressStops[index];
+      const span = Math.max(current - previous, 0.08);
+      return Math.min(current + span * 0.16, 1);
+    })(),
+  ])
+);
+
 function getActiveSectionId(progress: number) {
   let activeId = cards[0]?.id ?? "home";
 
@@ -219,14 +247,14 @@ function BillboardCard({
       if (!children.length) return;
 
       // Start with all hidden and rotated
-      children.forEach((el) => 
-        gsap.set(el, { 
-          rotationX: 90, 
+      children.forEach((el) =>
+        gsap.set(el, {
+          rotationX: 90,
           autoAlpha: 0,
           transformOrigin: "center center",
         })
       );
-      
+
       // Make the first word visible immediately
       gsap.set(children[0], { rotationX: 0, autoAlpha: 1 });
 
@@ -235,23 +263,23 @@ function BillboardCard({
       children.forEach((el, index) => {
         // 3D flip in from back
         tl.to(
-          el, 
-          { 
-            rotationX: 0, 
-            autoAlpha: 1, 
-            duration: 0.6, 
+          el,
+          {
+            rotationX: 0,
+            autoAlpha: 1,
+            duration: 0.6,
             ease: "back.out"
           },
           index === 0 ? 0 : "+=0"
         );
-        
+
         // Stay visible and static
         tl.to(
           el,
           { duration: 3.5 },
           "+=0"
         );
-        
+
         // 3D flip out to back
         tl.to(
           el,
@@ -275,7 +303,7 @@ function BillboardCard({
       <span
         className={`inline-block relative align-middle ml-2 overflow-hidden ${textClass ?? ""}`}
         aria-hidden
-        style={{ 
+        style={{
           lineHeight: 1.1,
           perspective: "1000px",
           display: "inline-flex",
@@ -283,8 +311,8 @@ function BillboardCard({
         }}
       >
         <span className="invisible absolute whitespace-nowrap">{longestWord}</span>
-        <span 
-          ref={container} 
+        <span
+          ref={container}
           className="relative inline-flex items-center justify-start font-bold"
           style={{
             position: "relative",
@@ -296,7 +324,7 @@ function BillboardCard({
             <span
               key={i}
               className="anim-word absolute left-0 top-1/2 whitespace-nowrap text-current"
-              style={{ 
+              style={{
                 willChange: "transform, opacity",
                 transformStyle: "preserve-3d",
                 transform: "translateY(-50%)",
@@ -435,9 +463,13 @@ function BillboardCard({
         </p>
         <button
           type="button"
-          className={`mt-6 rounded-full border px-6 py-3 text-sm font-semibold transition duration-300 hover:-translate-y-1 flex gap-2 items-center sm:mt-8 ${buttonClass}`}
+          onClick={() => {
+            const route = cardRoutes[card.id];
+            if (route) dispatchPageTransition(route);
+          }}
+          className={`mt-6 rounded-full border px-6 py-3 text-sm font-semibold transition duration-300 hover:-translate-y-1 flex gap-2 items-center sm:mt-8 ${buttonClass}${cardRoutes[card.id] ? "" : " opacity-0 pointer-events-none"}`}
         >
-          {card.cta} <BiRightArrow></BiRightArrow>
+          {card.cta} <BiRightArrow />
         </button>
       </div>
     </div>
@@ -479,7 +511,11 @@ function MobileCard({ card }: { card: FlightCard }) {
         </p>
         <button
           type="button"
-          className={`mt-5 rounded-full border px-5 py-2.5 text-sm font-semibold transition duration-300 ${buttonClass}`}
+          onClick={() => {
+            const route = cardRoutes[card.id];
+            if (route) dispatchPageTransition(route);
+          }}
+          className={`mt-5 rounded-full border px-5 py-2.5 text-sm font-semibold transition duration-300 ${buttonClass}${cardRoutes[card.id] ? "" : " opacity-0 pointer-events-none"}`}
         >
           {card.cta}
         </button>
@@ -523,7 +559,8 @@ export default function MultiverseFlight() {
       end: "bottom bottom",
       scrub: 0.6,
       onUpdate: (self) => {
-        const progress = self.progress;
+        // Cap at 0.96 so the camera doesn't overshoot the last (contact) card.
+        const progress = Math.min(self.progress, 0.96);
         setScrollProgress(progress);
         setIsDark(progress >= 0.36);
 
@@ -564,36 +601,11 @@ export default function MultiverseFlight() {
           sceneRef.current.style.background = `linear-gradient(180deg, ${topColor} 0%, ${bottomColor} 100%)`;
         }
 
-        // Hero image opacity, X, and scale
-        let heroOpacity = 1;
-        let heroX = 0;
-        let heroScale = 1;
-        let heroY = 20;
-
-        if (progress < 0.16) {
-          heroOpacity = 1;
-          heroX = 0;
-          heroScale = 1;
-        } else if (progress < 0.42) {
-          const heroProgress = (progress - 0.16) / (0.42 - 0.16);
-          heroOpacity = 1 - (heroProgress * 0.6);
-          heroX = heroProgress * 120;
-          heroScale = 1 + (heroProgress * 0.06 - heroProgress * 0.22);
-          heroY = -14 * heroProgress;
-        } else {
-          heroOpacity = 1;
-          heroX = 120;
-          heroScale = 0.84;
-          heroY = -14;
-        }
+        // Fade logo out gently as scene darkens
+        const heroOpacity = progress < 0.28 ? 1 : progress < 0.44 ? 1 - (progress - 0.28) / (0.44 - 0.28) * 0.5 : 0.5;
 
         if (heroImageRef.current) {
-          gsap.set(heroImageRef.current, {
-            opacity: heroOpacity,
-            x: heroX,
-            y: heroY,
-            scale: heroScale,
-          });
+          gsap.set(heroImageRef.current, { opacity: heroOpacity });
         }
 
         // Glow animations
@@ -650,13 +662,7 @@ export default function MultiverseFlight() {
 
     // Keep the brand/logo static and minimally styled — remove continuous animation.
     // Use gsap.set only to ensure consistent initial styling across renders.
-    gsap.set(heroImageRef.current, {
-      opacity: 1,
-      x: 0,
-      y: 0,
-      scale: 1,
-      rotateZ: 0,
-    });
+    gsap.set(heroImageRef.current, { opacity: 1 });
   }, []);
 
   useEffect(() => {
@@ -664,7 +670,7 @@ export default function MultiverseFlight() {
       const customEvent = event as CustomEvent<{ id?: string }>;
       const targetId = customEvent.detail?.id;
       const targetProgress = targetId
-        ? sectionProgressMap[targetId]
+        ? sectionNavTargetMap[targetId]
         : undefined;
       const container = containerRef.current;
 
@@ -759,8 +765,7 @@ export default function MultiverseFlight() {
 
           <div
             ref={heroImageRef}
-            // place logo near the bottom-right on large screens with minimal animation
-            className="pointer-events-none absolute right-[7vw] bottom-0 hidden w-[24vw] min-w-[260px] rounded-[2.2rem] bg-white/10 p-6 backdrop-blur-md lg:flex"
+            className="pointer-events-none absolute left-[3vw] top-4 hidden w-[18vw] min-w-[200px] rounded-[2.2rem] bg-white/10 p-4 backdrop-blur-md lg:flex"
           >
             <div className="relative flex w-full items-center justify-center overflow-hidden rounded-[1.8rem]">
               <Image
@@ -797,6 +802,7 @@ export default function MultiverseFlight() {
                   height={320}
                   className="h-full w-full object-contain"
                   priority
+                  unoptimized
                 />
               </div>
             </div>

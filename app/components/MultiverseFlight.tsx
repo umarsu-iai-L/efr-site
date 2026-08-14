@@ -5,7 +5,6 @@ import gsap from "gsap";
 import ScrollTrigger from "gsap/ScrollTrigger";
 import Image from "next/image";
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
-import SpaceParticles from "./SpaceParticles";
 import { BiRightArrow } from "react-icons/bi";
 
 const cardRoutes: Record<string, string> = {
@@ -258,7 +257,6 @@ function BillboardCard({
   const mountLead = index <= 1 ? 0.02 : 0.06;
   const cardRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
-  const parallaxRef = useRef<HTMLDivElement>(null);
   const contentMountedRef = useRef(shouldPreMountContent);
   const contentAnimatedRef = useRef(shouldPreMountContent);
   const [contentMounted, setContentMounted] = useState(shouldPreMountContent);
@@ -296,22 +294,19 @@ function BillboardCard({
       const children = Array.from(container.current.querySelectorAll(".anim-word")) as HTMLElement[];
       if (!children.length) return;
 
-      // Start with all hidden and rotated
-      children.forEach((el) =>
-        gsap.set(el, {
-          rotationX: 90,
-          autoAlpha: 0,
-          transformOrigin: "center center",
-        })
-      );
-
-      // Make the first word visible immediately
-      gsap.set(children[0], { rotationX: 0, autoAlpha: 1 });
-
       const tl = gsap.timeline({ repeat: -1, repeatDelay: 0.5 });
+      tl.set(children, {
+        rotationX: 90,
+        autoAlpha: 0,
+        transformOrigin: "center center",
+      });
 
       children.forEach((el, index) => {
-        // 3D flip in from back
+        tl.set(children.filter((_, childIndex) => childIndex !== index), {
+          autoAlpha: 0,
+        });
+
+        // 3D flip in one word at a time.
         tl.to(
           el,
           {
@@ -320,7 +315,7 @@ function BillboardCard({
             duration: 0.6,
             ease: "back.out"
           },
-          index === 0 ? 0 : "+=0"
+          index === 0 ? 0 : "+=0",
         );
 
         // Stay visible and static
@@ -378,6 +373,8 @@ function BillboardCard({
                 willChange: "transform, opacity",
                 transformStyle: "preserve-3d",
                 transform: "translateY(-50%)",
+                opacity: i === 0 ? 1 : 0,
+                visibility: i === 0 ? "visible" : "hidden",
               }}
             >
               {w}
@@ -505,45 +502,9 @@ function BillboardCard({
   const loaderTintClass = isLight ? "bg-white/35" : "bg-white/18";
   const loaderLineClass = isLight ? "bg-[#124677]/12" : "bg-white/22";
 
-  const handleParallaxMove = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (isMobile || !parallaxRef.current || window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      return;
-    }
-
-    const bounds = event.currentTarget.getBoundingClientRect();
-    const x = (event.clientX - bounds.left) / bounds.width - 0.5;
-    const y = (event.clientY - bounds.top) / bounds.height - 0.5;
-
-    gsap.to(parallaxRef.current, {
-      x: x * 14,
-      y: y * 10,
-      rotateY: x * 4,
-      rotateX: y * -4,
-      duration: 0.45,
-      ease: "power3.out",
-      overwrite: "auto",
-    });
-  };
-
-  const resetParallax = () => {
-    if (!parallaxRef.current) return;
-
-    gsap.to(parallaxRef.current, {
-      x: 0,
-      y: 0,
-      rotateX: 0,
-      rotateY: 0,
-      duration: 0.8,
-      ease: "elastic.out(1, 0.45)",
-      overwrite: "auto",
-    });
-  };
-
   return (
     <div
       ref={cardRef}
-      onPointerMove={handleParallaxMove}
-      onPointerLeave={resetParallax}
       style={{
         width: isMobile ? "min(90vw, 420px)" : card.width,
         // desktop transform is set by GSAP via useLayoutEffect; only mobile needs inline transform
@@ -552,12 +513,7 @@ function BillboardCard({
       className={`absolute flex rounded-[1.5rem] border p-5 backdrop-blur-xl sm:rounded-[2rem] sm:p-8 lg:p-10 ${contentMounted ? panelClass : loaderPanelClass}`}
     >
       {contentMounted ? (
-        <div
-          ref={parallaxRef}
-          className="flex w-full flex-col [transform-style:preserve-3d]"
-          style={{ willChange: "transform" }}
-        >
-          <div ref={contentRef} className={`flex w-full flex-col ${alignmentClass}`}>
+        <div ref={contentRef} className={`flex w-full flex-col ${alignmentClass}`}>
           <span
             className={`rounded-full border px-4 py-2 text-xs font-semibold uppercase tracking-[0.32em] ${badgeClass}`}
           >
@@ -590,7 +546,6 @@ function BillboardCard({
           >
             {card.cta} <BiRightArrow />
           </button>
-          </div>
         </div>
       ) : (
         <div
@@ -781,7 +736,7 @@ export default function MultiverseFlight() {
         }
 
         // Fade logo out gently as scene darkens
-        const heroOpacity = progress < 0.28 ? 1 : progress < 0.44 ? 1 - (progress - 0.28) / (0.44 - 0.28) * 0.5 : 0.5;
+        const heroOpacity = progress < 0.28 ? 1 : progress < 0.44 ? 1 - (progress - 0.28) / (0.30 - 0.10) * 1 : 1;
 
         if (heroImageRef.current) {
           gsap.set(heroImageRef.current, { opacity: heroOpacity });
@@ -925,7 +880,6 @@ export default function MultiverseFlight() {
 
   return (
     <>
-      <SpaceParticles />
       <div
         ref={containerRef}
         className="relative h-[1100vh] w-full bg-transparent"
@@ -952,13 +906,22 @@ export default function MultiverseFlight() {
             ref={heroImageRef}
             className="pointer-events-none absolute left-[3vw] top-4 hidden w-[18vw] min-w-[200px] rounded-[2.2rem] bg-white/10 p-4 backdrop-blur-md lg:flex"
           >
-            <div className="relative flex w-full items-center justify-center overflow-hidden rounded-[1.8rem]">
+            <div className="relative flex aspect-[2.8/1] w-full items-center justify-center overflow-hidden rounded-[1.8rem]">
               <Image
-                src={isDark ? "/EFR-3D.png" : "/EFR-B-3D.png"}
+                src="/EFR-B-3D.png"
                 alt="EFR 3D Logo"
-                width={520}
-                height={360}
-                className={`h-full w-full object-contain ${isDark ? "mix-blend-multiply" : "mix-blend-screen"}`}
+                fill
+                sizes="18vw"
+                className={`object-contain mix-blend-screen transition-opacity duration-700 ease-in-out ${isDark ? "opacity-0" : "opacity-100"}`}
+                priority
+              />
+              <Image
+                src="/EFR-3D.png"
+                alt=""
+                aria-hidden="true"
+                fill
+                sizes="18vw"
+                className={`object-contain mix-blend-multiply transition-opacity duration-700 ease-in-out ${isDark ? "opacity-100" : "opacity-0"}`}
                 priority
               />
             </div>

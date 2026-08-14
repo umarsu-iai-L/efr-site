@@ -28,13 +28,27 @@ export default function EfrLogo({ width = 120, height = 42, className = "", them
   }, [theme]);
 
   return (
-    <Image
-      src={isDark ? "/EFR-3D.png" : "/EFR-B-3D.png"}
-      alt="EFR Logo"
-      width={width}
-      height={height}
-      className={`object-contain transition-opacity duration-500 ${className}`}
-      priority
-    />
+    <span
+      className={`relative inline-block ${className}`}
+      style={{ width, height }}
+    >
+      <Image
+        src="/EFR-B-3D.png"
+        alt="EFR Logo"
+        fill
+        sizes={`${width}px`}
+        className={`object-contain transition-opacity duration-700 ease-in-out ${isDark ? "opacity-0" : "opacity-100"}`}
+        priority
+      />
+      <Image
+        src="/EFR-3D.png"
+        alt=""
+        aria-hidden="true"
+        fill
+        sizes={`${width}px`}
+        className={`object-contain transition-opacity duration-700 ease-in-out ${isDark ? "opacity-100" : "opacity-0"}`}
+        priority
+      />
+    </span>
   );
 }

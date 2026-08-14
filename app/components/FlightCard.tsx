@@ -34,12 +34,12 @@ const cards: FlightCard[] = [
     {
         id: "about",
         eyebrow: "02 / About Us",
-        title: "Identity Systems Built for Trust at Every Checkpoint",
+        title: "Emirates Face Recognition is a leading provider of advanced biometric solutions.",
         description:
-            "Move through the first cluster as if each billboard is one section of a single flagship landing page, stitched together through depth instead of flat scrolling.",
-        cta: "About EFR",
+            "`Emirates Face Recognition (EFR) is a UAE-based pioneer in biometrics and facial recognition technology, built on principles of privacy, trust, and security.Amongst the first to introduce this technology in the UAE, EFR supports the nation’s digital vision by delivering inclusive and accurate AI solutions across sectors.With a mission to enhance safety and drive innovation, EFR empowers various industries such as law enforcement, finance, healthcare, and hospitality through intelligent, secure technologies. Led by a team committed to excellence and integrity, EFR aims to create a safer, smarter, and more connected world.`.",
+        cta: "Shaping a Safer and Smarter Future",
         align: "right",
-        x: 280,
+        x: 0,
         z: -950,
         width: "clamp(300px, 36vw, 580px)",
         tone: "light",

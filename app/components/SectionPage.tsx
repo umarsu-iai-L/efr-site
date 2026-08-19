@@ -1,6 +1,6 @@
 "use client";
 
-import type { Children, ReactNode } from "react";
+import type { ReactNode } from "react";
 import Link from "next/link";
 import { useLayoutEffect, useRef } from "react";
 import gsap from "gsap";
@@ -350,7 +350,7 @@ export default function SectionPage({
                             {eyebrow}
                         </p>
 
-                        <h1 className="max-w-[1100px] text-[clamp(2.5rem,4.5vw,4.5rem)] leading-[1.05] tracking-[-0.035em] text-[#124677]">
+                        <h1 className="section-title max-w-[1100px] text-[clamp(2.5rem,4.5vw,4.5rem)] leading-[1.05] tracking-[-0.035em] text-[#124677]">
                             {title}
                         </h1>
                         <p className="section-lead max-w-3xl text-base leading-relaxed text-slate-600 sm:text-lg">
@@ -375,7 +375,7 @@ type SectionCardProps = {
     body: string;
     className?: string;
     Description?: string
-    children?: any
+    children?: ReactNode
 };
 
 export function SectionCard({
@@ -463,7 +463,7 @@ export function SectionCard({
                     ))}
                 </div>
             </div>
-            {children && <div className="section-card__description-underline mt-2 block h-px w-full origin-left bg-gradient-to-r from-[#00273f] via-[#006c9f] to-transparent">{children}</div>}
+            {children ? <div className="relative z-10">{children}</div> : null}
         </article>
     );
 }

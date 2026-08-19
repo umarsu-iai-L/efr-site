@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Image from "next/image";
 import SectionPage, { SectionCard } from "../components/SectionPage";
+import { Icon } from "@iconify/react";
 
 export const metadata: Metadata = {
     title: "About Us | EFR",
@@ -68,7 +69,7 @@ export default function AboutPage() {
             />
 
             <SectionCard
-                className="about-approach-card"
+                className="about-approach-card col-span-full"
                 Description="Our Mission & Values"
                 title="Approach"
                 body="At Emirates Face Recognition LLC, our mission is to harness the power of advanced biometric technologies to create safer, smarter, and more secure environments. We are guided by core values that shape every solution we deliver and every partnership we build.."
@@ -76,34 +77,45 @@ export default function AboutPage() {
                     {[
                         {
                             title: "Integrity",
+                            icon: "solar:shield-check-bold-duotone",
                             description:
                                 "We uphold the highest standards of honesty, transparency, and accountability in all that we do.",
                         },
                         {
                             title: "Excellence",
+                            icon: "solar:cup-star-bold-duotone",
                             description:
                                 "We are committed to delivering innovative, reliable, and world-class solutions that exceed expectations.",
                         },
                         {
                             title: "Collaboration",
+                            icon: "solar:users-group-rounded-bold-duotone",
                             description:
                                 "We believe in working hand-in-hand with clients, partners, and stakeholders to achieve shared goals.",
                         },
                         {
                             title: "Innovation",
+                            icon: "solar:lightbulb-bolt-bold-duotone",
                             description:
                                 "We continuously embrace cutting-edge technology and new ideas to stay ahead in a fast-changing world.",
                         },
                     ].map((value) => (
                         <div
                             key={value.title}
-                            className="rounded-2xl border border-white/15 bg-white/10 p-6 backdrop-blur-sm transition-all duration-300 hover:bg-white/15"
+                            className="group/value rounded-2xl border border-[#124677]/10 bg-white/70 p-6 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-[#2f78bc]/25 hover:bg-white hover:shadow-[0_16px_36px_rgba(18,70,119,0.12)]"
                         >
-                            <h3 className="mb-3 text-xl font-semibold text-white">
+                            <span className="mb-5 flex h-11 w-11 items-center justify-center rounded-xl bg-[#2f78bc]/10 text-[#2f78bc] transition-transform duration-300 group-hover/value:scale-110">
+                                <Icon
+                                    icon={value.icon}
+                                    width="24"
+                                    height="24"
+                                />
+                            </span>
+                            <h3 className="mb-3 text-xl font-semibold text-[#124677]">
                                 {value.title}
                             </h3>
 
-                            <p className="text-sm leading-7 text-white/75">
+                            <p className="text-sm leading-7 text-slate-600">
                                 {value.description}
                             </p>
                         </div>

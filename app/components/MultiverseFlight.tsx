@@ -5,8 +5,8 @@ import gsap from "gsap";
 import ScrollTrigger from "gsap/ScrollTrigger";
 import Image from "next/image";
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { BiRightArrow } from "react-icons/bi";
-
+import { Icon } from "@iconify/react";
+import Lenis from '@studio-freight/lenis'
 const cardRoutes: Record<string, string> = {
   about: "/about",
   services: "/services",
@@ -142,6 +142,19 @@ const cards: FlightCard[] = [
   },
 ];
 
+// Static gradient layers crossfaded via opacity (GPU-compositable) instead of
+// recomputing a `linear-gradient(...)` string from interpolated hex values on
+// every scroll tick, which forces a style recalc + repaint at 60fps.
+const sceneColorStops = [
+  { stop: 0, top: "#ffffff", bottom: "#eef5ff" },
+  { stop: 0.16, top: "#eff6ff", bottom: "#d8ebff" },
+  { stop: 0.3, top: "#124677", bottom: "#124677" },
+  { stop: 0.5, top: "#124677", bottom: "#124677" },
+  { stop: 0.7, top: "#0f172a", bottom: "#091225" },
+  { stop: 0.84, top: "#040b1f", bottom: "#020617" },
+  { stop: 1, top: "#020617", bottom: "#01030a" },
+];
+
 const sectionProgressMap: Record<string, number> = {
   home: 0,
   about: 0.11,
@@ -196,24 +209,6 @@ function getRevealWindow(index: number) {
   };
 }
 
-function getFocusWindow(index: number) {
-  const current = sectionProgressStops[index];
-  const previous = index > 0 ? sectionProgressStops[index - 1] : 0;
-  const next =
-    index < sectionProgressStops.length - 1
-      ? sectionProgressStops[index + 1]
-      : 1;
-
-  const leftSpan = Math.max(current - previous, 0.08);
-  const rightSpan = Math.max(next - current, 0.08);
-
-  return {
-    start: Math.max(current - leftSpan * 0.7, 0),
-    peak: current,
-    end: Math.min(current + rightSpan * 0.65, 1),
-  };
-}
-
 function easeInOutCubic(t: number) {
   return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 }
@@ -238,6 +233,121 @@ function animateWindowScrollTo(targetY: number, duration = 1000) {
   requestAnimationFrame(tick);
 }
 
+// AnimatedWords component: cycles through provided words using GSAP.
+// Declared at module scope (not inside BillboardCard) so React sees a stable
+// component type across renders instead of a brand-new one every time
+// BillboardCard re-renders — that's what was triggering "Components created
+// during render" and forcing AnimatedWords to remount (losing its GSAP
+// timeline/state) on every parent re-render.
+function AnimatedWords({
+  words,
+  textClass,
+}: {
+  words: string[];
+  textClass?: string;
+}) {
+  const container = useRef<HTMLSpanElement>(null);
+
+  useEffect(() => {
+    if (!container.current) return;
+    const children = Array.from(container.current.querySelectorAll(".anim-word")) as HTMLElement[];
+    if (!children.length) return;
+
+    const tl = gsap.timeline({ repeat: -1, repeatDelay: 0.5 });
+    tl.set(children, {
+      rotationX: 90,
+      autoAlpha: 0,
+      transformOrigin: "center center",
+    });
+
+    children.forEach((el, index) => {
+      tl.set(children.filter((_, childIndex) => childIndex !== index), {
+        autoAlpha: 0,
+      });
+
+      // 3D flip in one word at a time.
+      tl.to(
+        el,
+        {
+          rotationX: 0,
+          autoAlpha: 1,
+          duration: 0.6,
+          ease: "back.out"
+        },
+        index === 0 ? 0 : "+=0",
+      );
+
+      // Stay visible and static
+      tl.to(
+        el,
+        { duration: 3.5 },
+        "+=0"
+      );
+
+      // 3D flip out to back
+      tl.to(
+        el,
+        {
+          rotationX: -90,
+          autoAlpha: 0,
+          duration: 0.6,
+          ease: "back.in"
+        }
+      );
+    });
+
+    return () => {
+      tl.kill();
+    };
+  }, [words]);
+
+  const longestWord = words.reduce((a, b) => (a.length >= b.length ? a : b), words[0]);
+
+  return (
+    <span
+      className={`inline-block relative align-middle ml-2 overflow-hidden ${textClass ?? ""}`}
+      aria-hidden
+      style={{
+        lineHeight: 1.1,
+        perspective: "1000px",
+        display: "inline-flex",
+        alignItems: "center",
+        width: "max-content",
+      }}
+    >
+      <span className="invisible whitespace-nowrap font-bold">{longestWord}</span>
+      <span
+        ref={container}
+        className="pointer-events-none absolute left-0 top-1/2 inline-flex -translate-y-1/2 items-center justify-start font-bold"
+        style={{
+          height: "1em",
+          width: "100%",
+        }}
+      >
+        {words.map((w, i) => (
+          <span
+            key={i}
+            className="anim-word absolute left-0 top-1/2 whitespace-nowrap text-current"
+            style={{
+              willChange: "transform, opacity",
+              transformStyle: "preserve-3d",
+              transform: "translateY(-50%)",
+              opacity: i === 0 ? 1 : 0,
+              visibility: i === 0 ? "visible" : "hidden",
+            }}
+          >
+            {w}
+          </span>
+        ))}
+      </span>
+    </span>
+  );
+}
+
+// How far behind its resting z-point a card starts, so it visibly sails
+// forward into place during its reveal window instead of just fading in.
+const SAIL_DISTANCE = 260;
+
 function BillboardCard({
   card,
   index,
@@ -249,7 +359,7 @@ function BillboardCard({
   card: FlightCard;
   index: number;
   isMobile: boolean;
-  containerRef: React.RefObject<HTMLDivElement>;
+  containerRef: React.RefObject<HTMLDivElement> | null;
   revealStart: number;
   revealEnd: number;
 }) {
@@ -261,129 +371,37 @@ function BillboardCard({
   const contentAnimatedRef = useRef(shouldPreMountContent);
   const [contentMounted, setContentMounted] = useState(shouldPreMountContent);
 
-  // GSAP owns the desktop transform so React re-renders never stomp it
+  // GSAP owns the desktop transform so React re-renders never stomp it.
+  // These must match the timeline's pre-reveal keyframe exactly below, since
+  // the reveal tween animates FROM whatever the element's current value is.
   useLayoutEffect(() => {
     if (isMobile || !cardRef.current) return;
-    gsap.set(cardRef.current, { x: card.x, z: card.z, opacity: index === 0 ? 1 : 0 });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    const preReveal =
+      index === 0
+        ? { opacity: 1, blur: 0, scale: 1, z: card.z }
+        : { opacity: 0.22, blur: 3.2, scale: 0.95, z: card.z - SAIL_DISTANCE };
+    gsap.set(cardRef.current, {
+      x: card.x,
+      z: preReveal.z,
+      opacity: preReveal.opacity,
+      scale: preReveal.scale,
+      filter: preReveal.blur > 0 ? `blur(${preReveal.blur}px)` : "none",
+      pointerEvents: index === 0 ? "auto" : "none",
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Stagger home card content in on mount
   useEffect(() => {
+
     if (index !== 0 || isMobile || !contentRef.current) return;
     const els = Array.from(contentRef.current.children);
     gsap.fromTo(els,
       { y: 14, autoAlpha: 0 },
       { y: 0, autoAlpha: 1, stagger: 0.1, duration: 0.6, ease: "power2.out", delay: 0.4 }
     );
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  // AnimatedWords component: cycles through provided words using GSAP
-  function AnimatedWords({
-    words,
-    textClass,
-  }: {
-    words: string[];
-    textClass?: string;
-  }) {
-    const container = useRef<HTMLSpanElement>(null);
-
-    useEffect(() => {
-      if (!container.current) return;
-      const children = Array.from(container.current.querySelectorAll(".anim-word")) as HTMLElement[];
-      if (!children.length) return;
-
-      const tl = gsap.timeline({ repeat: -1, repeatDelay: 0.5 });
-      tl.set(children, {
-        rotationX: 90,
-        autoAlpha: 0,
-        transformOrigin: "center center",
-      });
-
-      children.forEach((el, index) => {
-        tl.set(children.filter((_, childIndex) => childIndex !== index), {
-          autoAlpha: 0,
-        });
-
-        // 3D flip in one word at a time.
-        tl.to(
-          el,
-          {
-            rotationX: 0,
-            autoAlpha: 1,
-            duration: 0.6,
-            ease: "back.out"
-          },
-          index === 0 ? 0 : "+=0",
-        );
-
-        // Stay visible and static
-        tl.to(
-          el,
-          { duration: 3.5 },
-          "+=0"
-        );
-
-        // 3D flip out to back
-        tl.to(
-          el,
-          {
-            rotationX: -90,
-            autoAlpha: 0,
-            duration: 0.6,
-            ease: "back.in"
-          }
-        );
-      });
-
-      return () => {
-        tl.kill();
-      };
-    }, [words]);
-
-    const longestWord = words.reduce((a, b) => (a.length >= b.length ? a : b), words[0]);
-
-    return (
-      <span
-        className={`inline-block relative align-middle ml-2 overflow-hidden ${textClass ?? ""}`}
-        aria-hidden
-        style={{
-          lineHeight: 1.1,
-          perspective: "1000px",
-          display: "inline-flex",
-          alignItems: "center",
-          width: "max-content",
-        }}
-      >
-        <span className="invisible whitespace-nowrap font-bold">{longestWord}</span>
-        <span
-          ref={container}
-          className="pointer-events-none absolute left-0 top-1/2 inline-flex -translate-y-1/2 items-center justify-start font-bold"
-          style={{
-            height: "1em",
-            width: "100%",
-          }}
-        >
-          {words.map((w, i) => (
-            <span
-              key={i}
-              className="anim-word absolute left-0 top-1/2 whitespace-nowrap text-current"
-              style={{
-                willChange: "transform, opacity",
-                transformStyle: "preserve-3d",
-                transform: "translateY(-50%)",
-                opacity: i === 0 ? 1 : 0,
-                visibility: i === 0 ? "visible" : "hidden",
-              }}
-            >
-              {w}
-            </span>
-          ))}
-        </span>
-      </span>
-    );
-  }
 
   // Helper to extract title prefix when animating words
   const getTitlePrefix = (title: string, words?: string[]) => {
@@ -394,15 +412,37 @@ function BillboardCard({
   };
 
   useEffect(() => {
-    if (!cardRef.current || !containerRef.current || isMobile) return;
+    if (!cardRef.current || !containerRef?.current || isMobile) return;
 
+    const el = cardRef.current;
+    const isLast = index === cards.length - 1;
     const thisStop = sectionProgressStops[index];
     const nextStop = sectionProgressStops[index + 1] ?? 1;
     // window after the peak where the card fades out as camera flies past
     const exitStart = thisStop + (nextStop - thisStop) * 0.35;
     const exitEnd = thisStop + (nextStop - thisStop) * 0.72;
 
-    const trigger = gsap.to(cardRef.current, {
+    const preReveal =
+      index === 0
+        ? { opacity: 1, blur: 0, scale: 1, z: card.z }
+        : { opacity: 0.22, blur: 3.2, scale: 0.95, z: card.z - SAIL_DISTANCE };
+    const stable = { opacity: 1, blur: 0, scale: 1, z: card.z };
+    const postExit = { opacity: 0, blur: 4, scale: 1.06, z: card.z };
+
+    // Applies a rounded blur() during a tween's own onUpdate (only fires
+    // while that tween is actually active, i.e. for a fraction of the
+    // scroll range) instead of every frame across the whole scrollbar.
+    const setRoundedBlur = (from: number, to: number, self: gsap.core.Tween) => {
+      const blur = from + (to - from) * self.progress();
+      const rounded = Math.round(blur);
+      gsap.set(el, { filter: rounded > 0 ? `blur(${rounded}px)` : "none" });
+    };
+
+    // Real GSAP tweens let the engine pre-calculate the interpolation and
+    // only run per-frame work while a given tween is in its active window —
+    // no more evaluating an if/else chain for every card on every scroll
+    // tick regardless of whether that card is anywhere near the viewport.
+    const tl = gsap.timeline({
       scrollTrigger: {
         trigger: containerRef.current,
         start: "top top",
@@ -431,55 +471,71 @@ function BillboardCard({
               { y: 0, autoAlpha: 1, stagger: 0.1, duration: 0.65, ease: "power3.out" },
             );
           }
-
-          let opacity = 0;
-          let blur = 0;
-          let scale = 1;
-
-          if (progress < revealStart) {
-            opacity = index === 0 ? 1 : 0.22;
-            blur = index === 0 ? 0 : 3.2;
-            scale = index === 0 ? 1 : 0.95;
-          } else if (progress < revealEnd) {
-            opacity = gsap.utils.mapRange(revealStart, revealEnd, index === 0 ? 1 : 0.42, 1, progress);
-            blur = gsap.utils.mapRange(revealStart, revealEnd, index === 0 ? 0 : 2.1, 0, progress);
-            scale = gsap.utils.mapRange(revealStart, revealEnd, index === 0 ? 1 : 0.97, 1, progress);
-          } else if (index < cards.length - 1 && progress < exitStart) {
-            opacity = 1;
-            blur = 0;
-            scale = 1;
-          } else if (index < cards.length - 1 && progress < exitEnd) {
-            // fade out as camera flies past this card
-            const t = (progress - exitStart) / (exitEnd - exitStart);
-            opacity = 1 - t;
-            blur = t * 4;
-            scale = 1 + t * 0.06;
-          } else if (index < cards.length - 1) {
-            opacity = 0;
-            blur = 4;
-            scale = 1.06;
-          } else {
-            opacity = 1;
-          }
-
-          gsap.set(cardRef.current, {
-            opacity: Math.min(1, Math.max(0, opacity)),
-            filter: `blur(${blur}px)`,
-            scale,
-          });
         },
       },
-      opacity: 1,
-      filter: "blur(0px)",
-      scale: 1,
-      duration: 0,
     });
 
+    // Sail/fade into the stable, focused position.
+    tl.to(
+      el,
+      {
+        z: stable.z,
+        opacity: stable.opacity,
+        scale: stable.scale,
+        duration: Math.max(revealEnd - revealStart, 0.0001),
+        ease: "none",
+        onUpdate: function (this: gsap.core.Tween) {
+          setRoundedBlur(preReveal.blur, stable.blur, this);
+        },
+      },
+      revealStart,
+    );
+
+    // Only the fully-focused, unblurred stable phase should accept clicks —
+    // otherwise a faded/blurred card can sit in front of the active one and
+    // swallow pointer events meant for its button.
+    tl.set(el, { pointerEvents: "auto" }, revealEnd);
+
+    if (!isLast) {
+      // For most cards exitStart falls comfortably after revealEnd, leaving
+      // a real "stable" gap where nothing touches opacity/scale/blur. But
+      // for cards whose gap to the *next* section is much smaller than their
+      // gap to the *previous* one (e.g. "innovation"), raw exitStart can
+      // land before revealEnd. Clamping the fade's start to revealEnd keeps
+      // it from ever overlapping the reveal tween — two tweens racing to set
+      // the same properties in the same window produces a visibly janky,
+      // non-monotonic fade, and would also leave pointerEvents stuck "auto"
+      // forever (its "none" set firing before the reveal tween's "auto" set).
+      const fadeStart = Math.max(exitStart, revealEnd);
+
+      // Fade out as the camera flies past this card.
+      tl.to(
+        el,
+        {
+          opacity: postExit.opacity,
+          scale: postExit.scale,
+          duration: Math.max(exitEnd - exitStart, 0.0001),
+          ease: "none",
+          onUpdate: function (this: gsap.core.Tween) {
+            setRoundedBlur(stable.blur, postExit.blur, this);
+          },
+        },
+        fadeStart,
+      );
+      tl.set(el, { pointerEvents: "none" }, fadeStart);
+    }
+
+    // Pad the timeline out to progress 1 so the ScrollTrigger scrub maps
+    // scroll progress directly onto timeline time 1:1 — without this, the
+    // timeline's own duration (ending at whichever keyframe was added last)
+    // would get stretched to fill the scrub range, shifting every keyframe.
+    tl.to({}, { duration: 0 }, 1);
+
     return () => {
-      trigger.scrollTrigger?.kill();
-      trigger.kill();
+      tl.scrollTrigger?.kill();
+      tl.kill();
     };
-  }, [card, index, isMobile, containerRef, revealStart, revealEnd]);
+  }, [card, index, isMobile, containerRef, revealStart, revealEnd, mountLead]);
 
   const isLight = card.tone === "light";
   const alignmentClass =
@@ -544,7 +600,7 @@ function BillboardCard({
             }}
             className={`mt-6 rounded-full border px-6 py-3 text-sm font-semibold transition duration-300 hover:-translate-y-1 flex gap-2 items-center sm:mt-8 ${buttonClass}${cardRoutes[card.id] ? "" : " opacity-0 pointer-events-none"}`}
           >
-            {card.cta} <BiRightArrow />
+            {card.cta} <Icon icon="bi:arrow-right" />
           </button>
         </div>
       ) : (
@@ -651,11 +707,14 @@ export default function MultiverseFlight() {
   const [isDark, setIsDark] = useState(false);
   const [scrollProgress, setScrollProgress] = useState(0);
   const sceneRef = useRef<HTMLDivElement>(null);
+  const sceneLayerRefs = useRef<(HTMLDivElement | null)[]>([]);
   const heroImageRef = useRef<HTMLDivElement>(null);
   const gifRef = useRef<HTMLDivElement>(null);
   const glowTopRef = useRef<HTMLDivElement>(null);
   const glowDeepRef = useRef<HTMLDivElement>(null);
   const movingSceneRef = useRef<HTMLDivElement>(null);
+  const currentSectionIndexRef = useRef(0);
+  const isGlidingRef = useRef(false);
 
   useEffect(() => {
     const onResize = () => {
@@ -669,7 +728,30 @@ export default function MultiverseFlight() {
       window.removeEventListener("resize", onResize);
     };
   }, []);
+  useEffect(() => {
+    const lenis = new Lenis({
+      duration: 1.2,
+      easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)), // standard easing
+      orientation: 'vertical',
+      gestureOrientation: 'vertical',
+      smoothWheel: true,
+      wheelMultiplier: 1,
+      touchMultiplier: 2,
+    })
 
+    function raf(time: number) {
+      lenis.raf(time)
+      requestAnimationFrame(raf)
+    }
+
+    requestAnimationFrame(raf)
+
+    // Sync GSAP ScrollTrigger with Lenis
+    lenis.on('scroll', ScrollTrigger.update)
+
+    // Clean up
+    return () => lenis.destroy()
+  }, [])
   useEffect(() => {
     if (!containerRef.current) return;
 
@@ -680,60 +762,30 @@ export default function MultiverseFlight() {
       scrub: 0.6,
       onUpdate: (self) => {
         const progress = self.progress;
-        setScrollProgress(progress);
-        setIsDark(progress >= 0.36);
-
-        // Smooth color interpolation
-        const hexToRgb = (hex: string) => {
-          const normalized = hex.replace("#", "");
-          const value = parseInt(normalized, 16);
-          return {
-            r: (value >> 16) & 255,
-            g: (value >> 8) & 255,
-            b: value & 255,
-          };
-        };
-
-        const rgbToHex = (r: number, g: number, b: number) => {
-          const toHex = (n: number) => Math.max(0, Math.min(255, Math.round(n))).toString(16).padStart(2, "0");
-          return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
-        };
-
-        const getColor = (progress: number, stops: number[], colors: string[]) => {
-          if (progress <= stops[0]) return colors[0];
-          if (progress >= stops[stops.length - 1]) return colors[colors.length - 1];
-
-          for (let i = 0; i < stops.length - 1; i++) {
-            const start = stops[i];
-            const end = stops[i + 1];
-
-            if (progress >= start && progress <= end) {
-              const t = (progress - start) / Math.max(end - start, 0.0001);
-              const c1 = hexToRgb(colors[i]);
-              const c2 = hexToRgb(colors[i + 1]);
-
-              return rgbToHex(
-                c1.r + (c2.r - c1.r) * t,
-                c1.g + (c2.g - c1.g) * t,
-                c1.b + (c2.b - c1.b) * t,
-              );
-            }
+        if (containerRef.current) {
+          if (progress >= 0.36) {
+            containerRef.current.classList.add("theme-dark");
+          } else {
+            containerRef.current.classList.remove("theme-dark");
           }
-
-          return colors[colors.length - 1];
-        };
-
-        const topColorStops = [0, 0.16, 0.3, 0.5, 0.7, 0.84, 1];
-        const topColorValues = ["#ffffff", "#eff6ff", "#124677", "#124677", "#0f172a", "#040b1f", "#020617"];
-        const bottomColorStops = [0, 0.16, 0.3, 0.5, 0.7, 0.84, 1];
-        const bottomColorValues = ["#eef5ff", "#d8ebff", "#124677", "#124677", "#091225", "#020617", "#01030a"];
-
-        const topColor = getColor(progress, topColorStops, topColorValues);
-        const bottomColor = getColor(progress, bottomColorStops, bottomColorValues);
-
-        if (sceneRef.current) {
-          sceneRef.current.style.background = `linear-gradient(180deg, ${topColor} 0%, ${bottomColor} 100%)`;
         }
+
+        // Crossfade between two adjacent static gradient layers via opacity
+        // (GPU-compositable) instead of recomputing a gradient string from
+        // interpolated hex values on every tick.
+        let segmentIndex = 0;
+        for (let i = 0; i < sceneColorStops.length - 1; i++) {
+          if (progress >= sceneColorStops[i].stop) segmentIndex = i;
+        }
+        const segStart = sceneColorStops[segmentIndex].stop;
+        const segEnd = sceneColorStops[segmentIndex + 1]?.stop ?? 1;
+        const segT = Math.min(1, Math.max(0, (progress - segStart) / Math.max(segEnd - segStart, 0.0001)));
+
+        sceneLayerRefs.current.forEach((el, i) => {
+          if (!el) return;
+          const opacity = i === segmentIndex ? 1 - segT : i === segmentIndex + 1 ? segT : 0;
+          gsap.set(el, { opacity });
+        });
 
         // Fade logo out gently as scene darkens
         const heroOpacity = progress < 0.28 ? 1 : progress < 0.44 ? 1 - (progress - 0.28) / (0.30 - 0.10) * 1 : 1;
@@ -852,6 +904,8 @@ export default function MultiverseFlight() {
   useEffect(() => {
     const progress = Math.min(1, Math.max(0, scrollProgress));
     const activeId = getActiveSectionId(progress);
+    const activeIndex = cards.findIndex((card) => card.id === activeId);
+    if (activeIndex >= 0) currentSectionIndexRef.current = activeIndex;
 
     window.dispatchEvent(
       new CustomEvent("flight-progress-update", {
@@ -859,6 +913,132 @@ export default function MultiverseFlight() {
       }),
     );
   }, [scrollProgress]);
+
+  // A deliberate double-scroll (two same-direction wheel ticks in quick
+  // succession) or an arrow key press glides to the next/previous section.
+  // A single, ordinary wheel tick is left completely alone so normal
+  // scrolling stays native and smooth instead of being hijacked every time.
+  useEffect(() => {
+    if (isMobile) return;
+
+    const wheelTickCountRef = { current: 0 };
+    const lastWheelDirectionRef = { current: 0 };
+    let wheelResetTimeout: number | undefined;
+    const WHEEL_TICKS_TO_GLIDE = 2;
+    const WHEEL_TICK_WINDOW_MS = 260;
+
+    const glideToIndex = (targetIndex: number) => {
+      const container = containerRef.current;
+      if (!container) return;
+
+      const clampedIndex = Math.max(0, Math.min(cards.length - 1, targetIndex));
+      const targetId = cards[clampedIndex].id;
+      const targetProgress = sectionNavTargetMap[targetId] ?? 0;
+
+      const containerTop = window.scrollY + container.getBoundingClientRect().top;
+      const scrollableHeight = container.offsetHeight - window.innerHeight;
+      const targetTop = containerTop + scrollableHeight * targetProgress;
+
+      currentSectionIndexRef.current = clampedIndex;
+
+      const prefersReducedMotion = window.matchMedia(
+        "(prefers-reduced-motion: reduce)",
+      ).matches;
+
+      if (prefersReducedMotion) {
+        window.scrollTo({ top: targetTop, behavior: "auto" });
+        return;
+      }
+
+      const duration = 850;
+      isGlidingRef.current = true;
+      animateWindowScrollTo(targetTop, duration);
+      window.setTimeout(() => {
+        isGlidingRef.current = false;
+      }, duration + 60);
+    };
+
+    const isWithinContainer = () => {
+      const container = containerRef.current;
+      if (!container) return false;
+      const rect = container.getBoundingClientRect();
+      return rect.top <= 0 && rect.bottom >= window.innerHeight;
+    };
+
+    const canGlide = (direction: number) => {
+      const atFirstSection = currentSectionIndexRef.current === 0;
+      const atLastSection = currentSectionIndexRef.current === cards.length - 1;
+      if (direction < 0 && atFirstSection) return false;
+      if (direction > 0 && atLastSection) return false;
+      return true;
+    };
+
+    const handleWheel = (event: WheelEvent) => {
+      if (!isWithinContainer()) return;
+
+      // Swallow extra ticks while a glide animation is already in flight so
+      // trackpad momentum can't fight the programmatic scroll and stutter.
+      if (isGlidingRef.current) {
+        event.preventDefault();
+        return;
+      }
+
+      const direction = event.deltaY > 0 ? 1 : event.deltaY < 0 ? -1 : 0;
+      if (direction === 0 || !canGlide(direction)) return;
+
+      if (direction !== lastWheelDirectionRef.current) {
+        wheelTickCountRef.current = 0;
+      }
+      lastWheelDirectionRef.current = direction;
+      wheelTickCountRef.current += 1;
+
+      if (wheelResetTimeout !== undefined) window.clearTimeout(wheelResetTimeout);
+      wheelResetTimeout = window.setTimeout(() => {
+        wheelTickCountRef.current = 0;
+      }, WHEEL_TICK_WINDOW_MS);
+
+      if (wheelTickCountRef.current < WHEEL_TICKS_TO_GLIDE) {
+        // First tick: let it scroll normally, no interception.
+        return;
+      }
+
+      event.preventDefault();
+      wheelTickCountRef.current = 0;
+      glideToIndex(currentSectionIndexRef.current + direction);
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      const isEditableTarget =
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.tagName === "SELECT" ||
+          target.isContentEditable);
+      if (isEditableTarget) return;
+
+      const direction =
+        event.key === "ArrowDown" || event.key === "ArrowRight"
+          ? 1
+          : event.key === "ArrowUp" || event.key === "ArrowLeft"
+            ? -1
+            : 0;
+      if (direction === 0) return;
+      if (!isWithinContainer() || isGlidingRef.current || !canGlide(direction)) return;
+
+      event.preventDefault();
+      glideToIndex(currentSectionIndexRef.current + direction);
+    };
+
+    window.addEventListener("wheel", handleWheel, { passive: false });
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.removeEventListener("wheel", handleWheel);
+      window.removeEventListener("keydown", handleKeyDown);
+      if (wheelResetTimeout !== undefined) window.clearTimeout(wheelResetTimeout);
+    };
+  }, [isMobile]);
 
   if (isMobile) {
     return (
@@ -892,7 +1072,21 @@ export default function MultiverseFlight() {
             ref={sceneRef}
             className="absolute inset-0"
             style={{ opacity: 0.8 }}
-          />
+          >
+            {sceneColorStops.map((layer, i) => (
+              <div
+                key={layer.stop}
+                ref={(el) => {
+                  sceneLayerRefs.current[i] = el;
+                }}
+                className="absolute inset-0 will-change-[opacity]"
+                style={{
+                  background: `linear-gradient(180deg, ${layer.top} 0%, ${layer.bottom} 100%)`,
+                  opacity: i === 0 ? 1 : 0,
+                }}
+              />
+            ))}
+          </div>
           <div
             ref={glowTopRef}
             className="absolute inset-x-0 top-0 h-[45vh] bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.9),_transparent_62%)]"
@@ -904,18 +1098,18 @@ export default function MultiverseFlight() {
 
           <div
             ref={heroImageRef}
-            className="pointer-events-none absolute left-[3vw] top-4 hidden w-[18vw] min-w-[200px] rounded-[2.2rem] bg-white/10 p-4 backdrop-blur-md lg:flex"
+
           >
             <div className="relative flex aspect-[2.8/1] w-full items-center justify-center overflow-hidden rounded-[1.8rem]">
-              <Image
+              {/* <Image
                 src="/EFR-B-3D.png"
                 alt="EFR 3D Logo"
                 fill
                 sizes="18vw"
                 className={`object-contain mix-blend-screen transition-opacity duration-700 ease-in-out ${isDark ? "opacity-0" : "opacity-100"}`}
                 priority
-              />
-              <Image
+              /> */}
+              {/* <Image
                 src="/EFR-3D.png"
                 alt=""
                 aria-hidden="true"
@@ -923,14 +1117,16 @@ export default function MultiverseFlight() {
                 sizes="18vw"
                 className={`object-contain mix-blend-multiply transition-opacity duration-700 ease-in-out ${isDark ? "opacity-100" : "opacity-0"}`}
                 priority
-              />
+              /> */}
             </div>
           </div>
 
           <div
             ref={movingSceneRef}
+
             style={{
-              transformStyle: "preserve-3d",
+              willChange: "transform",
+              transformStyle: "preserve-3d"
             }}
             className="absolute inset-0 flex items-center justify-center"
           >
